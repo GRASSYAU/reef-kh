@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>珊瑚缸 KH 紀錄</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- defer：等 HTML 全部解析完才執行 app.js，這樣 JS 才找得到下方的表格 -->
+  <script src="js/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>珊瑚缸 KH 紀錄</h1>
+  </header>
+
+  <main>
+    <!-- 狀態訊息：載入中、筆數、錯誤訊息都顯示在這裡，內容由 app.js 填入 -->
+    <p id="status" class="status">資料載入中…</p>
+
+    <!-- 外層包一個 div，手機螢幕太窄時表格可以左右捲動 -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">日期</th>
+            <th scope="col">時間</th>
+            <th scope="col" class="num">KH (dKH)</th>
+            <th scope="col" class="num">添加量 (mL)</th>
+            <th scope="col">備註</th>
+          </tr>
+        </thead>
+        <!-- tbody 故意留空，資料列由 app.js 產生 -->
+        <tbody id="kh-body"></tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

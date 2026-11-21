@@ -1,0 +1,92 @@
+/* ---------- 全站基本設定 ---------- */
+
+/* 讓 width 包含 padding 與 border，排版比較好計算 */
+* {
+  box-sizing: border-box;
+}
+
+/* CSS 變數：顏色集中在這裡，之後要改色只改一處 */
+:root {
+  --text: #1f2933;
+  --muted: #6b7280;
+  --line: #d9dee5;
+  --head-bg: #eef2f6;
+  --stripe: #f8fafc;
+  --error: #b42318;
+  --error-bg: #fef3f2;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  font-family: "Microsoft JhengHei", "微軟正黑體", system-ui, sans-serif;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+header,
+main {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 1.5rem;
+}
+
+/* ---------- 狀態訊息 ---------- */
+
+.status {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+/* app.js 在載入失敗時會加上 error 這個 class */
+.status.error {
+  padding: 8px 12px;
+  color: var(--error);
+  background: var(--error-bg);
+  border-left: 4px solid var(--error);
+}
+
+/* ---------- 表格 ---------- */
+
+/* 螢幕太窄時，只有表格區塊左右捲動，整個頁面不會被撐寬 */
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse; /* 相鄰儲存格的框線合併成一條 */
+}
+
+th,
+td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+th {
+  background: var(--head-bg);
+  font-weight: 600;
+}
+
+/* 數字欄位靠右，並使用等寬數字，小數點才會對齊 */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 備註欄允許換行 */
+td:last-child {
+  white-space: normal;
+}
+
+/* 斑馬紋：偶數列加上淡底色，比較好閱讀 */
+tbody tr:nth-child(even) {
+  background: var(--stripe);
+}
