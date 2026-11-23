@@ -49,7 +49,12 @@
 
 body {
   margin: 0;
-  padding: 24px 16px 48px;
+  /* max(…, env(…))：一般留固定的距離；手機橫放時，瀏海那一側至少留到安全距離 */
+  padding:
+    max(24px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(48px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
   color: var(--text);
   background: var(--page);
@@ -319,14 +324,18 @@ button.small + button.small {
   grid-column: span 2;
 }
 
-.record-form .check {
+/* 勾選框：方框在左、文字在右 */
+label.check {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  color: var(--text-2);
   font-size: 0.875rem;
 }
 
-.record-form .check input {
+label.check input {
+  flex: none;
   width: 18px;
   height: 18px;
 }
@@ -682,10 +691,6 @@ tr.editing td {
 /* ---------- 手機版面 ---------- */
 
 @media (max-width: 640px) {
-  body {
-    padding: 16px 12px 40px;
-  }
-
   .card {
     padding: 14px;
   }
@@ -770,5 +775,386 @@ tr.editing td {
 
   .analysis-list {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+}
+
+
+/* ---------- App 版面：電腦上的預設值 ---------- */
+
+html {
+  -webkit-text-size-adjust: 100%; /* iPhone 橫放時不要自動放大文字 */
+}
+
+button,
+input,
+select,
+summary,
+a {
+  touch-action: manipulation; /* 取消「點兩下放大」，按下去的反應比較快 */
+  -webkit-tap-highlight-color: transparent; /* 不要顯示手機瀏覽器預設的灰色點擊效果 */
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 這些元件只有手機版面才用得到 */
+.tab-bar,
+.settings-button,
+.hero,
+.recent,
+.more-toggle,
+.stepper {
+  display: none;
+}
+
+/* 電腦：more-fields 這層外框「不存在」，裡面的欄位直接排進表單的格線 */
+.more-fields {
+  display: contents;
+}
+
+.kh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#settings h3 {
+  margin: 20px 0 6px;
+}
+
+#settings h2 + h3 {
+  margin-top: 8px;
+}
+
+#settings p {
+  margin: 0 0 8px;
+}
+
+#settings .check {
+  margin: 4px 0;
+}
+
+/* ---------- App 版面：手機 ---------- */
+
+/* 這裡的寬度要跟 app.js 裡的 mobileLayout 一致 */
+@media (max-width: 640px) {
+  /* env(safe-area-inset-*)：iPhone 瀏海、圓角與底部橫條占掉的距離。
+     下方另外留出分頁列的高度，內容才不會被擋住 */
+  body {
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      calc(12px + env(safe-area-inset-right))
+      calc(76px + env(safe-area-inset-bottom))
+      calc(12px + env(safe-area-inset-left));
+  }
+
+  h1 {
+    font-size: 1.25rem;
+  }
+
+  .app-header {
+    margin-bottom: 12px;
+  }
+
+  .settings-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 4px 14px;
+    font-size: 0.875rem;
+  }
+
+  .settings-button[aria-pressed="true"] {
+    color: var(--surface);
+    background: var(--text);
+    border-color: var(--text);
+  }
+
+  /* 一次只顯示一個分頁：先全部隱藏，再顯示跟 body 的 data-view 相同的區塊 */
+  main > [data-view] {
+    display: none;
+  }
+
+  body[data-view="record"] main > [data-view="record"],
+  body[data-view="trend"] main > [data-view="trend"],
+  body[data-view="analysis"] main > [data-view="analysis"],
+  body[data-view="history"] main > [data-view="history"],
+  body[data-view="settings"] main > [data-view="settings"] {
+    display: block;
+  }
+
+  body[data-view="trend"] main > .tiles,
+  body[data-view="record"] main > .hero {
+    display: grid;
+  }
+
+  body.no-data main > [data-needs-data] {
+    display: none;
+  }
+
+  /* 資料範圍的說明只在「趨勢」與「歷史」顯示；錯誤訊息在每個分頁都顯示 */
+  .status {
+    margin: 2px 0 0;
+    font-size: 0.8125rem;
+  }
+
+  body[data-view="record"] .status:not(.error),
+  body[data-view="analysis"] .status:not(.error),
+  body[data-view="settings"] .status:not(.error) {
+    display: none;
+  }
+
+  /* 「記錄」分頁最上方的摘要：左邊是最新的 KH，右邊是三個小數字 */
+  .hero {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 12px;
+    padding: 0 4px 14px;
+  }
+
+  .hero-label,
+  .hero-today {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  .hero-value {
+    font-size: 3.25rem;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .hero-unit {
+    margin-left: 6px;
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--text-2);
+  }
+
+  .hero-side {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 2px 10px;
+    margin: 0 0 2px;
+    font-size: 0.8125rem;
+  }
+
+  .hero-side dt {
+    color: var(--text-2);
+  }
+
+  .hero-side dd {
+    margin: 0;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 記錄表單：KH 輸入框與儲存按鈕排在最上面，其他欄位收在「更多欄位」。
+     order 只改變畫面上的順序，HTML 裡的順序不變 */
+  .record-form {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch; /* 每個欄位都撐滿寬度 */
+    gap: 12px;
+  }
+
+  .kh-field {
+    order: 1;
+  }
+
+  .form-actions {
+    order: 2;
+  }
+
+  .more-toggle {
+    order: 3;
+  }
+
+  .more-fields {
+    order: 4;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .more-fields.collapsed {
+    display: none;
+  }
+
+  /* 兩欄排列；選項文字較長的欄位占滿整列 */
+  .more-fields .span-2 {
+    grid-column: auto;
+  }
+
+  .more-fields .wide,
+  .more-fields .full-on-mobile {
+    grid-column: 1 / -1;
+  }
+
+  .kh-input {
+    display: flex;
+    gap: 8px;
+  }
+
+  .kh-input input {
+    flex: 1;
+    min-width: 0;
+    min-height: 64px;
+    font-size: 2rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .kh-input input::placeholder {
+    font-size: 1.125rem;
+    font-weight: 400;
+  }
+
+  .stepper {
+    display: block;
+    flex: none;
+    width: 60px;
+    min-height: 64px;
+    font-size: 1.75rem;
+    line-height: 1;
+  }
+
+  .form-actions button {
+    flex: 1 1 100%;
+    min-height: 52px;
+    font-size: 1.0625rem;
+  }
+
+  .form-actions .message {
+    flex-basis: 100%;
+  }
+
+  .more-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    color: var(--text-2);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+
+  .more-label {
+    flex: none;
+    color: var(--text);
+  }
+
+  .more-label::after {
+    content: " ▾";
+  }
+
+  .more-toggle[aria-expanded="true"] .more-label::after {
+    content: " ▴";
+  }
+
+  /* 最近的紀錄 */
+  .recent-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .recent-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--grid);
+    font-size: 0.9375rem;
+  }
+
+  .recent-list li:last-child {
+    border-bottom: 0;
+  }
+
+  .recent-date {
+    flex: none;
+    width: 7.5em;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .recent-list strong {
+    flex: none;
+    width: 2.2em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .recent-note {
+    min-width: 0;
+    color: var(--text-2);
+    font-size: 0.8125rem;
+  }
+
+  /* 手指點得到的大小 */
+  input[type="date"],
+  input[type="time"],
+  input[type="number"],
+  input[type="text"],
+  input[type="password"],
+  select,
+  .button-row button,
+  .token-row button,
+  .show-all {
+    min-height: 44px;
+  }
+
+  /* 底部分頁列：固定在畫面最下方 */
+  .tab-bar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .tab-bar button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 56px;
+    padding: 6px 0 4px;
+    color: var(--text-2);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    font-size: 0.6875rem;
+  }
+
+  .tab-bar svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* 目前所在的分頁 */
+  .tab-bar button[aria-current="page"] {
+    color: var(--kh);
+    font-weight: 600;
   }
 }

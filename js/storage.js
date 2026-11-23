@@ -194,6 +194,40 @@ export function migrateLegacyChanges(base, changes) {
 }
 
 
+// ===== 資料檔的本機備份 =====
+
+// 每次成功讀到 GitHub 上的資料檔，就在這台裝置存一份。
+// 之後沒有網路時，至少可以顯示上次同步的內容，而不是更舊的版本。
+
+const BASE_KEY = 'reef-kh:base';
+
+export function saveBaseSnapshot(records) {
+  try {
+    localStorage.setItem(BASE_KEY, JSON.stringify({ savedAt: Date.now(), records }));
+  } catch (error) {
+    console.error(error); // 空間不足時存不進去，不影響其他功能
+  }
+}
+
+// 回傳 { savedAt, records }；沒有備份時回傳 null
+export function loadBaseSnapshot() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(BASE_KEY) ?? 'null');
+    return stored && Array.isArray(stored.records) ? stored : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+export function clearBaseSnapshot() {
+  try {
+    localStorage.removeItem(BASE_KEY);
+  } catch (error) {
+    // 無法存取 localStorage 時，本來就沒有備份
+  }
+}
+
+
 // ===== 記錄一項變更 =====
 
 // 新增或修改：同一個 id 已經有暫存的內容就換掉，否則加在最後
