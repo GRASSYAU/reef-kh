@@ -1,4 +1,4 @@
-// 主程式：讀取資料，然後更新統計卡片、圖表與表格，並處理新增紀錄表單
+// 主程式：讀取資料，然後更新統計卡片、圖表與表格，並處理紀錄的新增、編輯與刪除
 
 import {
   loadRecords, buildDays, averageKh, currentDose,
@@ -6,7 +6,7 @@ import {
 } from './data.js';
 import { renderCharts } from './chart.js';
 import {
-  loadLocalRecords, saveLocalRecords, isSameRecord, toJsonText, downloadText,
+  emptyChanges, loadChanges, saveChanges, isSameRecord, toJsonText, downloadText,
 } from './storage.js';
 
 // 目標 KH（dKH）。要調整目標時只改這一行
@@ -19,22 +19,79 @@ const form = document.querySelector('#record-form');
 const formMessage = document.querySelector('#form-message');
 const exportInfo = document.querySelector('#export-info');
 const exportButton = document.querySelector('#export-button');
+const discardButton = document.querySelector('#discard-button');
+const formTitle = document.querySelector('#form-title');
+const submitButton = document.querySelector('#submit-button');
+const cancelButton = document.querySelector('#cancel-button');
 
-// 資料來源有兩個，畫面顯示的是兩者合併後的結果
-let fileRecords = [];  // data/kh-records.json 裡的紀錄
-let localRecords = []; // 用表單新增、暫存在瀏覽器裡的紀錄
-let charts = null;     // 圖表只建立一次，之後用 charts.update() 重畫
+// 畫面顯示的資料 = 檔案裡的紀錄 + 在瀏覽器裡做的變更
+let fileRecords = [];          // data/kh-records.json 裡的紀錄
+let changes = emptyChanges();  // 尚未寫入檔案的新增、修改、刪除
+let records = [];              // 套用變更後的所有紀錄（畫面上顯示的就是這份）
+let origin = new Map();        // 每一筆紀錄的來源：檔案、新增的、還是修改過的
+let editing = null;            // 正在編輯的那一筆；null 代表目前是「新增」模式
+let charts = null;             // 圖表只建立一次，之後用 charts.update() 重畫
 
 
-// ===== 合併兩個資料來源 =====
+// ===== 把變更套用到檔案紀錄上 =====
 
-function allRecords() {
-  // concat 把兩個陣列接起來；sort 依日期排序，同一天的維持原本的先後順序
-  return fileRecords.concat(localRecords).sort((a, b) => a.date.localeCompare(b.date));
+function buildRecords() {
+  origin = new Map();
+  const result = [];
+  const removed = changes.removed.slice(); // 複製一份，比對到一筆就拿掉一筆
+
+  fileRecords.forEach((record) => {
+    // 被刪除的：跳過
+    const removedIndex = removed.findIndex((item) => isSameRecord(item, record));
+    if (removedIndex !== -1) {
+      removed.splice(removedIndex, 1);
+      return;
+    }
+    // 被修改的：在原本的位置放入修改後的內容
+    const entry = changes.replaced.find((item) => isSameRecord(item.from, record));
+    if (entry) {
+      result.push(entry.to);
+      origin.set(entry.to, { kind: 'replaced', entry });
+      return;
+    }
+    result.push(record);
+    origin.set(record, { kind: 'file' });
+  });
+
+  // 新增的：接在後面
+  changes.added.forEach((record) => {
+    result.push(record);
+    origin.set(record, { kind: 'added' });
+  });
+
+  // 依日期排序，同一天的維持原本的先後順序
+  return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function isLocal(record) {
-  return localRecords.includes(record);
+// 檔案更新後（例如匯出並取代了檔案），把已經寫入檔案的變更從暫存移除
+function cleanChanges() {
+  const inFile = (record) => fileRecords.some((item) => isSameRecord(item, record));
+  const before = JSON.stringify(changes);
+
+  changes.added = changes.added.filter((record) => !inFile(record));
+  changes.removed = changes.removed.filter(inFile);
+  changes.replaced = changes.replaced.filter((entry) => {
+    if (inFile(entry.from)) {
+      return true; // 檔案裡還是舊內容，修改尚未寫入
+    }
+    if (!inFile(entry.to)) {
+      changes.added.push(entry.to); // 原本的那筆已不在檔案裡，修改後的內容改當成新增
+    }
+    return false;
+  });
+
+  if (JSON.stringify(changes) !== before) {
+    saveChanges(changes);
+  }
+}
+
+function changeCount() {
+  return changes.added.length + changes.removed.length + changes.replaced.length;
 }
 
 
@@ -112,7 +169,17 @@ function createCell(text, className) {
   return td;
 }
 
-function renderTable(records) {
+function createButton(text, label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'small';
+  button.textContent = text;
+  button.setAttribute('aria-label', label); // 給螢幕閱讀器的完整說明
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderTable() {
   tbody.replaceChildren();
 
   // 最新的排在最上面。slice() 先複製一份再反轉，不會改到原本的陣列
@@ -129,29 +196,29 @@ function renderTable(records) {
     if (states.length > 0) {
       tr.classList.add('not-counted');
     }
-    if (isLocal(record)) {
-      states.push('尚未寫入檔案');
+    const kind = origin.get(record).kind;
+    if (kind === 'added') {
+      states.push('新增，尚未寫入檔案');
+    } else if (kind === 'replaced') {
+      states.push('已修改，尚未寫入檔案');
+    }
+    if (record === editing) {
+      tr.classList.add('editing');
     }
 
     tr.appendChild(createCell(record.date));
     tr.appendChild(createCell(record.time));
     tr.appendChild(createCell(record.kh.toFixed(1), 'num'));
     tr.appendChild(createCell(record.dose_ml ?? '', 'num'));
-
-    const stateCell = createCell(states.join('、'));
-    // 只有暫存在瀏覽器的紀錄可以在這裡刪除；檔案裡的紀錄要直接改 JSON 檔
-    if (isLocal(record)) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'small';
-      button.textContent = '刪除';
-      button.setAttribute('aria-label', `刪除 ${record.date} KH ${record.kh} 的紀錄`);
-      button.addEventListener('click', () => deleteLocalRecord(record));
-      stateCell.appendChild(button);
-    }
-    tr.appendChild(stateCell);
-
+    tr.appendChild(createCell(states.join('、')));
     tr.appendChild(createCell(record.note));
+
+    const name = `${record.date} KH ${record.kh.toFixed(1)}`;
+    const actions = document.createElement('td');
+    actions.appendChild(createButton('編輯', `編輯 ${name} 的紀錄`, () => startEdit(record)));
+    actions.appendChild(createButton('刪除', `刪除 ${name} 的紀錄`, () => deleteRecord(record)));
+    tr.appendChild(actions);
+
     tbody.appendChild(tr);
   });
 }
@@ -159,12 +226,12 @@ function renderTable(records) {
 
 // ===== 重新整理整個畫面 =====
 
-// 資料有任何變動（載入完成、新增、刪除）都呼叫這個函式
+// 資料有任何變動（載入完成、新增、修改、刪除）都呼叫這個函式
 function refresh() {
-  const records = allRecords();
+  records = buildRecords();
   const days = buildDays(records);
 
-  renderTable(records);
+  renderTable();
   renderExportInfo();
 
   if (days.length === 0) {
@@ -194,13 +261,36 @@ function refresh() {
 }
 
 function renderExportInfo() {
-  exportInfo.textContent = localRecords.length > 0
-    ? `有 ${localRecords.length} 筆新紀錄只存在這個瀏覽器，尚未寫入 data/kh-records.json。`
-    : '所有紀錄都已寫入 data/kh-records.json。';
+  const count = changeCount();
+  discardButton.hidden = count === 0;
+
+  if (count === 0) {
+    exportInfo.textContent = '所有紀錄都已寫入 data/kh-records.json。';
+    return;
+  }
+  const parts = [];
+  if (changes.added.length > 0) {
+    parts.push(`新增 ${changes.added.length} 筆`);
+  }
+  if (changes.replaced.length > 0) {
+    parts.push(`修改 ${changes.replaced.length} 筆`);
+  }
+  if (changes.removed.length > 0) {
+    parts.push(`刪除 ${changes.removed.length} 筆`);
+  }
+  exportInfo.textContent =
+    `有 ${count} 項變更只存在這個瀏覽器（${parts.join('、')}），尚未寫入 data/kh-records.json。`;
+}
+
+// 存檔並重畫；回傳是否成功存入瀏覽器
+function saveAndRefresh() {
+  const saved = saveChanges(changes);
+  refresh();
+  return saved;
 }
 
 
-// ===== 新增與刪除 =====
+// ===== 表單 =====
 
 // 今天的日期，格式 'YYYY-MM-DD'（用電腦的當地時間）
 function todayText() {
@@ -215,22 +305,53 @@ function showFormMessage(text, isError) {
   formMessage.classList.toggle('error', isError);
 }
 
-// 表單的預設值：今天的日期，以及目前的添加量
+// 回到「新增」模式：清空表單，預設今天的日期與目前的添加量
 function resetForm() {
+  editing = null;
   form.reset();
   form.elements.date.value = todayText();
-  const dose = currentDose(buildDays(allRecords()));
+  const dose = currentDose(buildDays(records));
   form.elements.dose_ml.value = dose ? dose.dose : '';
+
+  formTitle.textContent = '新增紀錄';
+  submitButton.textContent = '新增';
+  cancelButton.hidden = true;
 }
 
-function handleSubmit(event) {
-  // 表單預設會重新載入頁面，這裡攔下來改由 JS 處理
-  event.preventDefault();
+// 進入「編輯」模式：把這筆紀錄的內容填進表單
+function startEdit(record) {
+  editing = record;
+  const fields = form.elements;
+  fields.date.value = record.date;
+  fields.time.value = record.time ?? '';
+  fields.kh.value = record.kh;
+  fields.dose_ml.value = record.dose_ml ?? '';
+  fields.type.value = record.type ?? 'tank';
+  fields.exclude.checked = record.exclude === true;
+  fields.note.value = record.note ?? '';
 
+  formTitle.textContent = `編輯紀錄（${record.date} KH ${record.kh.toFixed(1)}）`;
+  submitButton.textContent = '儲存修改';
+  cancelButton.hidden = false;
+  showFormMessage('', false);
+  renderTable(); // 重畫表格，標示正在編輯的那一列
+
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  fields.kh.focus({ preventScroll: true });
+}
+
+function cancelEdit() {
+  resetForm();
+  renderTable();
+  showFormMessage('已取消編輯。', false);
+}
+
+// 把表單欄位的內容組成一筆紀錄
+function readForm() {
   // 從表單欄位讀出的值都是字串，數字要自己用 Number() 轉換
   const fields = form.elements;
   const type = fields.type.value;
-  const record = {
+  return {
     date: fields.date.value,
     time: fields.time.value,
     kh: Number(fields.kh.value),
@@ -240,43 +361,112 @@ function handleSubmit(event) {
     exclude: type === 'tank' && fields.exclude.checked,
     note: fields.note.value.trim(),
   };
+}
+
+function handleSubmit(event) {
+  // 表單預設會重新載入頁面，這裡攔下來改由 JS 處理
+  event.preventDefault();
+  const record = readForm();
 
   // 必填、數值範圍已由 HTML 的 required、min、max 檢查，這裡補上其餘的檢查
   if (record.date > todayText()) {
     showFormMessage('日期不能是未來的日期。', true);
     return;
   }
-  if (allRecords().some((existing) => isSameRecord(existing, record))) {
+  if (editing && isSameRecord(editing, record)) {
+    resetForm();
+    renderTable();
+    showFormMessage('內容沒有變更。', false);
+    return;
+  }
+  if (records.some((existing) => existing !== editing && isSameRecord(existing, record))) {
     showFormMessage('已經有一筆內容完全相同的紀錄。', true);
     return;
   }
 
-  localRecords.push(record);
-  const saved = saveLocalRecords(localRecords);
-  refresh();
-  resetForm();
-  fields.kh.focus();
-
-  if (saved) {
-    showFormMessage(`已新增 ${formatShortDate(record.date)} 的紀錄（KH ${record.kh.toFixed(1)}）。`, false);
+  const wasEditing = editing !== null;
+  if (wasEditing) {
+    applyEdit(editing, record);
   } else {
-    showFormMessage('已新增，但瀏覽器無法儲存，重新整理後會消失，請立即匯出 JSON。', true);
+    changes.added.push(record);
+  }
+
+  const saved = saveAndRefresh();
+  resetForm();
+  renderTable();
+  if (!wasEditing) {
+    form.elements.kh.focus();
+  }
+
+  const name = `${formatShortDate(record.date)} 的紀錄（KH ${record.kh.toFixed(1)}）`;
+  if (saved) {
+    showFormMessage(wasEditing ? `已修改 ${name}。` : `已新增 ${name}。`, false);
+  } else {
+    showFormMessage('已套用，但瀏覽器無法儲存，重新整理後會消失，請立即匯出 JSON。', true);
   }
 }
 
-function deleteLocalRecord(record) {
+
+// ===== 修改與刪除 =====
+
+// 依紀錄的來源，把修改記到對應的變更清單
+function applyEdit(record, updated) {
+  const source = origin.get(record);
+
+  if (source.kind === 'added') {
+    // 還沒寫入檔案的新增紀錄：直接換成新內容
+    changes.added[changes.added.indexOf(record)] = updated;
+  } else if (source.kind === 'replaced') {
+    // 之前改過的：更新修改後的內容；如果改回跟檔案一樣，就等於沒改
+    if (isSameRecord(source.entry.from, updated)) {
+      changes.replaced = changes.replaced.filter((entry) => entry !== source.entry);
+    } else {
+      source.entry.to = updated;
+    }
+  } else {
+    // 檔案裡的紀錄：記下「從哪一筆改成什麼」
+    changes.replaced.push({ from: record, to: updated });
+  }
+}
+
+function deleteRecord(record) {
   if (!confirm(`確定要刪除 ${record.date} KH ${record.kh.toFixed(1)} 這筆紀錄嗎？`)) {
     return;
   }
-  // filter：留下「不是這一筆」的紀錄，等於把它刪掉
-  localRecords = localRecords.filter((item) => item !== record);
-  saveLocalRecords(localRecords);
-  refresh();
-  showFormMessage('已刪除。', false);
+  const source = origin.get(record);
+
+  if (source.kind === 'added') {
+    // filter：留下「不是這一筆」的紀錄，等於把它刪掉
+    changes.added = changes.added.filter((item) => item !== record);
+  } else if (source.kind === 'replaced') {
+    // 改過又刪除：取消修改，並把檔案裡原本那筆記為刪除
+    changes.replaced = changes.replaced.filter((entry) => entry !== source.entry);
+    changes.removed.push(source.entry.from);
+  } else {
+    changes.removed.push(record);
+  }
+
+  const wasEditingThis = editing === record;
+  saveAndRefresh();
+  if (wasEditingThis) {
+    resetForm();
+  }
+  showFormMessage('已刪除。寫入檔案前，可用「捨棄未寫入的變更」復原。', false);
+}
+
+function handleDiscard() {
+  if (!confirm(`確定要捨棄 ${changeCount()} 項尚未寫入檔案的變更嗎？畫面會回到檔案裡的內容。`)) {
+    return;
+  }
+  changes = emptyChanges();
+  saveAndRefresh();
+  resetForm();
+  renderTable();
+  showFormMessage('已捨棄所有未寫入的變更。', false);
 }
 
 function handleExport() {
-  downloadText('kh-records.json', toJsonText(allRecords()));
+  downloadText('kh-records.json', toJsonText(records));
 }
 
 
@@ -285,18 +475,15 @@ function handleExport() {
 async function init() {
   try {
     fileRecords = await loadRecords();
-
-    // 暫存的紀錄如果已經出現在檔案裡（代表已匯出並取代檔案），就從暫存移除
-    const stored = loadLocalRecords();
-    localRecords = stored.filter((local) => !fileRecords.some((item) => isSameRecord(item, local)));
-    if (localRecords.length !== stored.length) {
-      saveLocalRecords(localRecords);
-    }
+    changes = loadChanges();
+    cleanChanges();
 
     refresh();
     resetForm();
     form.addEventListener('submit', handleSubmit);
+    cancelButton.addEventListener('click', cancelEdit);
     exportButton.addEventListener('click', handleExport);
+    discardButton.addEventListener('click', handleDiscard);
   } catch (error) {
     // 讀檔失敗、JSON 格式錯誤、欄位缺漏，都會跑到這裡
     console.error(error);

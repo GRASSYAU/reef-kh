@@ -20,7 +20,7 @@
     <section id="tiles" class="tiles" aria-label="統計摘要"></section>
 
     <section class="card">
-      <h2>新增紀錄</h2>
+      <h2 id="form-title">新增紀錄</h2>
       <form id="record-form" class="record-form">
         <label>日期
           <input type="date" name="date" required>
@@ -48,7 +48,8 @@
           異常或可疑讀值，不納入統計
         </label>
         <div class="form-actions wide">
-          <button type="submit" class="primary">新增</button>
+          <button type="submit" id="submit-button" class="primary">新增</button>
+          <button type="button" id="cancel-button" hidden>取消</button>
           <!-- role="status"：內容更新時，螢幕閱讀器會唸出來 -->
           <span id="form-message" class="form-message" role="status"></span>
         </div>
@@ -56,14 +57,15 @@
 
       <div class="export">
         <p id="export-info"></p>
+        <button id="discard-button" type="button" hidden>捨棄未寫入的變更</button>
         <button id="export-button" type="button">匯出 JSON</button>
         <details>
-          <summary>如何把新紀錄寫回專案</summary>
+          <summary>如何把變更寫回專案</summary>
           <ol>
             <li>按「匯出 JSON」，下載 <code>kh-records.json</code>。</li>
             <li>用下載的檔案取代專案裡的 <code>data/kh-records.json</code>。</li>
             <li>在 VS Code 的「原始檔控制」提交並同步。</li>
-            <li>重新整理這個頁面，已寫入檔案的紀錄會自動從瀏覽器暫存中移除。</li>
+            <li>重新整理這個頁面，已寫入檔案的變更會自動從瀏覽器暫存中移除。</li>
           </ol>
         </details>
       </div>
@@ -100,6 +102,7 @@
               <th scope="col" class="num">添加量 (mL)</th>
               <th scope="col">狀態</th>
               <th scope="col">備註</th>
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <!-- tbody 故意留空，資料列由 app.js 產生 -->

@@ -1,27 +1,49 @@
-// 瀏覽器暫存：用表單新增、還沒寫入 data/kh-records.json 的紀錄，先存在 localStorage
+// 瀏覽器暫存：在網頁上做的新增、修改、刪除，在寫入 data/kh-records.json 之前先存在 localStorage
 //
 // localStorage 是瀏覽器內建的小型儲存空間，只能存字串，
-// 所以存的時候用 JSON.stringify 把陣列轉成字串，讀的時候用 JSON.parse 轉回來。
+// 所以存的時候用 JSON.stringify 把物件轉成字串，讀的時候用 JSON.parse 轉回來。
 // 資料只存在「這台電腦的這個瀏覽器」，清除瀏覽資料就會消失，所以要定期匯出。
+//
+// 暫存的內容是「相對於檔案的變更」，分成三類：
+//   added    新增的紀錄
+//   removed  要從檔案中刪除的紀錄
+//   replaced 修改的紀錄，每一項是 { from: 檔案裡原本的內容, to: 修改後的內容 }
 
-const STORAGE_KEY = 'reef-kh:new-records';
+const STORAGE_KEY = 'reef-kh:changes';
+const OLD_STORAGE_KEY = 'reef-kh:new-records'; // 舊版只存新增的紀錄
 
-// 讀出暫存的紀錄；沒有資料或讀取失敗時回傳空陣列
-export function loadLocalRecords() {
+export function emptyChanges() {
+  return { added: [], removed: [], replaced: [] };
+}
+
+// 讀出暫存的變更；沒有資料或讀取失敗時回傳空的變更
+export function loadChanges() {
+  const changes = emptyChanges();
   try {
-    const text = localStorage.getItem(STORAGE_KEY);
-    const records = text ? JSON.parse(text) : [];
-    return Array.isArray(records) ? records : [];
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    if (stored) {
+      changes.added = Array.isArray(stored.added) ? stored.added : [];
+      changes.removed = Array.isArray(stored.removed) ? stored.removed : [];
+      changes.replaced = Array.isArray(stored.replaced) ? stored.replaced : [];
+    }
+
+    // 舊版留下的暫存紀錄，轉成新格式後把舊的刪掉
+    const old = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY) ?? 'null');
+    if (Array.isArray(old)) {
+      changes.added = changes.added.concat(old);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(changes));
+      localStorage.removeItem(OLD_STORAGE_KEY);
+    }
   } catch (error) {
     console.error(error);
-    return [];
   }
+  return changes;
 }
 
 // 存入暫存；成功回傳 true，失敗（例如無痕模式或空間已滿）回傳 false
-export function saveLocalRecords(records) {
+export function saveChanges(changes) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(changes));
     return true;
   } catch (error) {
     console.error(error);

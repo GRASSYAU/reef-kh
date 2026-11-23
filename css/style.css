@@ -328,8 +328,8 @@ th {
   font-variant-numeric: tabular-nums;
 }
 
-/* 備註欄允許換行 */
-td:last-child {
+/* 備註欄（倒數第二欄）允許換行 */
+td:nth-last-child(2) {
   min-width: 12em;
   white-space: normal;
 }
@@ -421,9 +421,17 @@ button.primary:hover {
 /* 表格裡的小按鈕 */
 button.small {
   min-height: 0;
-  margin-left: 8px;
   padding: 0 8px;
   font-size: 0.8125rem;
+}
+
+button.small + button.small {
+  margin-left: 6px;
+}
+
+/* 正在編輯的那一列 */
+tr.editing td {
+  background: color-mix(in srgb, var(--kh) 12%, transparent);
 }
 
 .form-actions {
