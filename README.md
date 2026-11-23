@@ -21,7 +21,7 @@ reef-kh/
 ├── index.html            頁面骨架
 ├── css/style.css         樣式
 ├── js/app.js             讀取 JSON 並產生表格
-└── data/kh-records.json  KH 紀錄（目前為範例資料）
+└── data/kh-records.json  KH 紀錄（2026-08-25 起的實際測量值）
 ```
 
 ## 如何執行
