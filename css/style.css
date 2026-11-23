@@ -1,4 +1,23 @@
-/* ---------- 顏色與全站設定 ---------- */
+/* ==========================================================================
+   珊瑚缸 KH 紀錄 的樣式
+   順序：字體與顏色 → 基本元素 → 各個區塊 → 圖表 → 表格 → 手機的 App 版面
+   ========================================================================== */
+
+/* ---------- 字體 ---------- */
+
+/* Figtree：英數字用的字體（開源授權，授權條款在 fonts/Figtree-LICENSE.txt）。
+   unicode-range 限定只有英數字與常用符號使用這個字體，中文仍然用裝置內建的字體 */
+@font-face {
+  font-family: "Figtree";
+  src: url("../fonts/figtree-latin-wght-normal.woff2") format("woff2");
+  font-weight: 300 900; /* 可變字體：這個範圍內的粗細都由同一個檔案提供 */
+  font-style: normal;
+  font-display: swap; /* 字體還沒下載完時，先用內建字體顯示，不會一片空白 */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---------- 顏色與共用設定 ---------- */
 
 * {
   box-sizing: border-box;
@@ -12,17 +31,25 @@
 /* CSS 變數：顏色集中在這裡。圖表（SVG）也使用同一組變數 */
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --text: #0b0b0b;
-  --text-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --kh: #2a78d6;
-  --dose: #eb6834;
-  --highlight: #e3edfa;
+  --page: #f2f5f9;        /* 頁面底色 */
+  --surface: #ffffff;     /* 卡片底色 */
+  --field: #f5f7fa;       /* 輸入欄位與次要按鈕的底色 */
+  --text: #101828;
+  --text-2: #475467;      /* 次要文字 */
+  --muted: #7a8699;       /* 更淡的文字：圖表刻度、不納入統計的列 */
+  --grid: #e8ecf1;        /* 分隔線、圖表格線 */
+  --axis: #cfd6df;        /* 欄位與按鈕的框線 */
+  --border: rgba(16, 24, 40, 0.08);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 16px rgba(16, 24, 40, 0.05);
+  --kh: #2a78d6;          /* 圖表：KH */
+  --dose: #eb6834;        /* 圖表：添加量 */
+  --accent-bg: #1f67c8;   /* 主要按鈕的底色 */
+  --accent-bg-hover: #1a57ab;
+  --accent-fg: #1f67c8;   /* 主題色的文字與圖示 */
+  --accent-soft: #e8f1fd; /* 主題色的淡底：數值標籤、目前所在的分頁 */
+  --accent-text: #184f95; /* 放在淡底上的文字 */
+  --hero-from: #1b5fc0;   /* 首頁摘要卡片的漸層 */
+  --hero-to: #0b7a80;
   --error: #b42318;
   --error-bg: #fef3f2;
 }
@@ -31,20 +58,30 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --text: #f0efec;
-    --text-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
+    --page: #0b0f14;
+    --surface: #151a21;
+    --field: #0f141a;
+    --text: #eef1f5;
+    --text-2: #b4bcc8;
+    --muted: #8792a2;
+    --grid: #232a33;
+    --axis: #323b47;
+    --border: rgba(255, 255, 255, 0.08);
+    --shadow: none;
     --kh: #3987e5;
     --dose: #d95926;
-    --highlight: #1c2a3d;
+    --accent-bg: #2f6fd0;
+    --accent-bg-hover: #3b7fe0;
+    --accent-fg: #6ea8f2;
+    --accent-soft: #172a44;
+    --accent-text: #a9cbf7;
     --error: #ff8a80;
     --error-bg: #3a1614;
   }
+}
+
+html {
+  -webkit-text-size-adjust: 100%; /* iPhone 橫放時不要自動放大文字 */
 }
 
 body {
@@ -55,7 +92,8 @@ body {
     max(16px, env(safe-area-inset-right))
     max(48px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
-  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  /* 英數字用 Figtree，中文用各裝置內建的字體（iPhone 是蘋方，Windows 是微軟正黑體） */
+  font-family: "Figtree", system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
   color: var(--text);
   background: var(--page);
   line-height: 1.6;
@@ -68,22 +106,52 @@ main {
 }
 
 h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.app-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
 }
 
 h2 {
-  margin: 0 0 8px;
-  font-size: 1.05rem;
+  margin: 0 0 10px;
+  font-size: 1.0625rem;
+  font-weight: 700;
 }
 
 h3 {
-  margin: 16px 0 4px;
-  font-size: 0.95rem;
+  margin: 18px 0 4px;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 code {
+  padding: 1px 5px;
+  background: var(--field);
+  border-radius: 5px;
   font-size: 0.875em;
+}
+
+a {
+  color: var(--accent-fg);
+}
+
+button,
+input,
+select,
+summary,
+a {
+  touch-action: manipulation; /* 取消「點兩下放大」，按下去的反應比較快 */
+  -webkit-tap-highlight-color: transparent; /* 不要顯示手機瀏覽器預設的灰色點擊效果 */
 }
 
 /* 沒有任何有效讀值時，隱藏統計、圖表與分析 */
@@ -91,19 +159,27 @@ code {
   display: none;
 }
 
-/* ---------- 訊息 ---------- */
+/* ---------- 頁首與訊息 ---------- */
+
+.app-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
 .status {
-  margin: 4px 0 20px;
+  margin: 6px 0 20px;
   color: var(--text-2);
+  font-size: 0.9375rem;
 }
 
 /* app.js 在載入失敗時會加上 error 這個 class */
 .status.error {
-  padding: 8px 12px;
+  padding: 10px 14px;
   color: var(--error);
   background: var(--error-bg);
-  border-left: 4px solid var(--error);
+  border-radius: 10px;
 }
 
 .message {
@@ -126,9 +202,9 @@ code {
 
 .notice {
   margin: 0 0 12px;
-  padding: 8px 12px;
-  background: var(--page);
-  border-left: 4px solid var(--axis);
+  padding: 10px 14px;
+  background: var(--field);
+  border-radius: 10px;
   font-size: 0.875rem;
 }
 
@@ -145,28 +221,31 @@ code {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
 }
 
 .tile {
-  padding: 12px 16px;
+  padding: 14px 18px;
 }
 
 .tile-label {
   color: var(--text-2);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .tile-value {
-  font-size: 1.75rem;
-  font-weight: 600;
+  font-size: 1.875rem;
+  font-weight: 700;
   line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 .tile-unit {
-  margin-left: 4px;
+  margin-left: 5px;
   font-size: 0.875rem;
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--text-2);
 }
 
@@ -176,7 +255,7 @@ code {
 }
 
 .card {
-  padding: 16px;
+  padding: 18px 20px;
   margin-bottom: 16px;
 }
 
@@ -186,7 +265,7 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 8px 16px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .card-head h2 {
@@ -201,6 +280,7 @@ code {
 
 .card summary {
   cursor: pointer;
+  font-weight: 500;
 }
 
 .card details ul,
@@ -231,11 +311,11 @@ input[type="text"],
 input[type="password"],
 select {
   width: 100%;
-  min-height: 40px;
-  padding: 6px 10px;
-  background: var(--page);
+  min-height: 42px;
+  padding: 6px 12px;
+  background: var(--field);
   border: 1px solid var(--axis);
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 input:disabled,
@@ -247,21 +327,27 @@ input:focus-visible,
 select:focus-visible,
 button:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--kh);
+  outline: 2px solid var(--accent-fg);
   outline-offset: 1px;
 }
 
 button {
-  min-height: 40px;
-  padding: 6px 16px;
+  min-height: 42px;
+  padding: 6px 18px;
   background: var(--surface);
   border: 1px solid var(--axis);
-  border-radius: 6px;
+  border-radius: 10px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 button:hover {
-  background: var(--page);
+  background: var(--field);
+}
+
+/* 按下去的瞬間稍微縮小，有「按到了」的感覺 */
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 button:disabled {
@@ -271,19 +357,30 @@ button:disabled {
 
 button.primary {
   color: #ffffff;
-  background: #256abf;
-  border-color: #256abf;
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  font-weight: 600;
 }
 
 button.primary:hover:not(:disabled) {
-  background: #1c5cab;
+  background: var(--accent-bg-hover);
+  border-color: var(--accent-bg-hover);
 }
 
-/* 表格裡的小按鈕 */
+/* 表格裡的小按鈕：沒有框線，只有淡淡的底色 */
 button.small {
   min-height: 0;
-  padding: 1px 8px;
+  padding: 2px 10px;
+  color: var(--text-2);
+  background: var(--field);
+  border-color: transparent;
+  border-radius: 8px;
   font-size: 0.8125rem;
+}
+
+button.small:hover {
+  color: var(--text);
+  background: var(--grid);
 }
 
 button.small + button.small {
@@ -306,6 +403,7 @@ button.small + button.small {
 }
 
 .record-form label,
+.kh-field,
 .analysis-controls label,
 .token-row label {
   display: flex;
@@ -324,6 +422,11 @@ button.small + button.small {
   grid-column: span 2;
 }
 
+/* 電腦：more-fields 這層外框「不存在」，裡面的欄位直接排進表單的格線 */
+.more-fields {
+  display: contents;
+}
+
 /* 勾選框：方框在左、文字在右 */
 label.check {
   display: flex;
@@ -338,6 +441,7 @@ label.check input {
   flex: none;
   width: 18px;
   height: 18px;
+  accent-color: var(--accent-bg); /* 勾選時的顏色 */
 }
 
 .form-actions {
@@ -347,11 +451,11 @@ label.check input {
   gap: 8px 12px;
 }
 
-/* ---------- 儲存、同步與匯出 ---------- */
+/* ---------- 儲存狀態、同步與匯出 ---------- */
 
 .save-area {
   margin-top: 16px;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--grid);
   font-size: 0.875rem;
 }
@@ -376,37 +480,56 @@ label.check input {
   flex: 1 1 220px;
 }
 
+#settings h3 {
+  margin: 22px 0 6px;
+}
+
+#settings h2 + h3 {
+  margin-top: 8px;
+}
+
+#settings p {
+  margin: 0 0 8px;
+}
+
+#settings .check {
+  margin: 6px 0;
+}
+
 /* ---------- 圖表 ---------- */
 
-/* 時間範圍：三個按鈕連在一起 */
+/* 時間範圍：一組連在一起的按鈕，目前選取的那個浮起來 */
 .range-buttons {
   display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 11px;
 }
 
 .range-buttons button {
-  min-height: 34px;
-  padding: 2px 12px;
-  border-radius: 0;
+  min-height: 30px;
+  padding: 2px 14px;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  border-radius: 8px;
   font-size: 0.875rem;
 }
 
-.range-buttons button + button {
-  margin-left: -1px;
-}
-
-.range-buttons button:first-child {
-  border-radius: 6px 0 0 6px;
-}
-
-.range-buttons button:last-child {
-  border-radius: 0 6px 6px 0;
-}
-
-/* 目前選取的範圍 */
 .range-buttons button[aria-pressed="true"] {
-  color: var(--surface);
-  background: var(--text);
-  border-color: var(--text);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14);
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .range-buttons button[aria-pressed="true"] {
+    background: var(--axis);
+    box-shadow: none;
+  }
 }
 
 .legend {
@@ -440,8 +563,9 @@ label.check input {
 }
 
 .chart:focus-visible {
-  outline: 2px solid var(--kh);
+  outline: 2px solid var(--accent-fg);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .chart svg {
@@ -533,18 +657,18 @@ label.check input {
   stroke-width: 1;
 }
 
-/* ---------- 提示框 ---------- */
+/* ---------- 圖表的提示框 ---------- */
 
 .tooltip {
   position: absolute;
   z-index: 1;
   width: max-content;
   max-width: 270px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
   font-size: 0.8125rem;
   line-height: 1.5;
   pointer-events: none; /* 滑鼠事件穿透，不會擋住圖表 */
@@ -591,6 +715,11 @@ label.check input {
   max-width: 280px;
 }
 
+#analysis-result h3 {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
 /* dl 是「名稱 — 內容」成對的清單，用兩欄格線排成表格的樣子 */
 .analysis-list {
   display: grid;
@@ -601,7 +730,7 @@ label.check input {
 .analysis-list dt,
 .analysis-list dd {
   margin: 0;
-  padding: 8px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--grid);
 }
 
@@ -635,7 +764,7 @@ table {
 
 th,
 td {
-  padding: 6px 10px;
+  padding: 8px 10px;
   text-align: left;
   border-bottom: 1px solid var(--grid);
   white-space: nowrap;
@@ -643,6 +772,7 @@ td {
 
 th {
   color: var(--text-2);
+  font-size: 0.8125rem;
   font-weight: 600;
   border-bottom-color: var(--axis);
 }
@@ -651,6 +781,10 @@ th {
 .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.cell-kh {
+  font-weight: 600;
 }
 
 /* 備註欄允許換行 */
@@ -672,11 +806,11 @@ tr.not-counted td {
 
 /* 正在編輯的那一列 */
 tr.editing td {
-  background: var(--highlight);
+  background: var(--accent-soft);
 }
 
 .show-all {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .mini-table {
@@ -688,120 +822,8 @@ tr.editing td {
   margin: 0 0 8px;
 }
 
-/* ---------- 手機版面 ---------- */
+/* ---------- 只有手機版面才用得到的元件：電腦上先隱藏 ---------- */
 
-@media (max-width: 640px) {
-  .card {
-    padding: 14px;
-  }
-
-  /* 紀錄表格改成一筆一塊：隱藏表頭，每個欄位前面顯示自己的名稱 */
-  .records-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%); /* 畫面上看不到，但螢幕閱讀器仍讀得到 */
-  }
-
-  .records-table,
-  .records-table tbody,
-  .records-table td {
-    display: block;
-  }
-
-  .records-table tr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 14px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--grid);
-  }
-
-  .records-table td {
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    text-align: left;
-    white-space: normal;
-  }
-
-  /* 沒有內容的欄位不顯示 */
-  .records-table td:empty {
-    display: none;
-  }
-
-  .records-table td[data-label]::before {
-    content: attr(data-label) " ";
-    color: var(--text-2);
-    font-size: 0.8125rem;
-  }
-
-  .records-table td[data-unit]::after {
-    content: " " attr(data-unit);
-    color: var(--text-2);
-    font-size: 0.8125rem;
-  }
-
-  .records-table .cell-date,
-  .records-table .cell-kh {
-    font-weight: 600;
-  }
-
-  .records-table .cell-note,
-  .records-table .cell-actions {
-    flex-basis: 100%;
-  }
-
-  .records-table .cell-actions {
-    margin-top: 4px;
-  }
-
-  /* 手指點得到的按鈕大小 */
-  .records-table button.small {
-    min-height: 36px;
-    padding: 4px 16px;
-    font-size: 0.875rem;
-  }
-
-  tr.editing td {
-    background: none;
-  }
-
-  .records-table tr.editing {
-    background: var(--highlight);
-  }
-
-  .analysis-list {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  }
-}
-
-
-/* ---------- App 版面：電腦上的預設值 ---------- */
-
-html {
-  -webkit-text-size-adjust: 100%; /* iPhone 橫放時不要自動放大文字 */
-}
-
-button,
-input,
-select,
-summary,
-a {
-  touch-action: manipulation; /* 取消「點兩下放大」，按下去的反應比較快 */
-  -webkit-tap-highlight-color: transparent; /* 不要顯示手機瀏覽器預設的灰色點擊效果 */
-}
-
-.app-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* 這些元件只有手機版面才用得到 */
 .tab-bar,
 .settings-button,
 .hero,
@@ -811,53 +833,39 @@ a {
   display: none;
 }
 
-/* 電腦：more-fields 這層外框「不存在」，裡面的欄位直接排進表單的格線 */
-.more-fields {
-  display: contents;
-}
+/* ==========================================================================
+   手機的 App 版面
+   這裡的寬度要跟 app.js 裡的 mobileLayout 一致
+   ========================================================================== */
 
-.kh-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-#settings h3 {
-  margin: 20px 0 6px;
-}
-
-#settings h2 + h3 {
-  margin-top: 8px;
-}
-
-#settings p {
-  margin: 0 0 8px;
-}
-
-#settings .check {
-  margin: 4px 0;
-}
-
-/* ---------- App 版面：手機 ---------- */
-
-/* 這裡的寬度要跟 app.js 裡的 mobileLayout 一致 */
 @media (max-width: 640px) {
   /* env(safe-area-inset-*)：iPhone 瀏海、圓角與底部橫條占掉的距離。
      下方另外留出分頁列的高度，內容才不會被擋住 */
   body {
     padding:
       calc(12px + env(safe-area-inset-top))
-      calc(12px + env(safe-area-inset-right))
-      calc(76px + env(safe-area-inset-bottom))
-      calc(12px + env(safe-area-inset-left));
+      calc(14px + env(safe-area-inset-right))
+      calc(84px + env(safe-area-inset-bottom))
+      calc(14px + env(safe-area-inset-left));
   }
 
   h1 {
-    font-size: 1.25rem;
+    gap: 8px;
+    font-size: 1.1875rem;
+  }
+
+  .app-icon {
+    width: 28px;
+    height: 28px;
   }
 
   .app-header {
-    margin-bottom: 12px;
+    margin-bottom: 14px;
+  }
+
+  .card {
+    padding: 16px;
+    margin-bottom: 14px;
   }
 
   .settings-button {
@@ -865,16 +873,21 @@ a {
     align-items: center;
     min-height: 36px;
     padding: 4px 14px;
+    color: var(--text-2);
+    background: var(--surface);
+    border-color: var(--border);
+    border-radius: 999px;
     font-size: 0.875rem;
   }
 
   .settings-button[aria-pressed="true"] {
-    color: var(--surface);
-    background: var(--text);
-    border-color: var(--text);
+    color: #ffffff;
+    background: var(--accent-bg);
+    border-color: var(--accent-bg);
   }
 
-  /* 一次只顯示一個分頁：先全部隱藏，再顯示跟 body 的 data-view 相同的區塊 */
+  /* ----- 分頁：一次只顯示一個。先全部隱藏，再顯示跟 body 的 data-view 相同的區塊 ----- */
+
   main > [data-view] {
     display: none;
   }
@@ -887,8 +900,7 @@ a {
     display: block;
   }
 
-  body[data-view="trend"] main > .tiles,
-  body[data-view="record"] main > .hero {
+  body[data-view="trend"] main > .tiles {
     display: grid;
   }
 
@@ -898,7 +910,7 @@ a {
 
   /* 資料範圍的說明只在「趨勢」與「歷史」顯示；錯誤訊息在每個分頁都顯示 */
   .status {
-    margin: 2px 0 0;
+    margin: 6px 0 0;
     font-size: 0.8125rem;
   }
 
@@ -908,54 +920,118 @@ a {
     display: none;
   }
 
-  /* 「記錄」分頁最上方的摘要：左邊是最新的 KH，右邊是三個小數字 */
+  /* ----- 「記錄」分頁最上方的摘要卡片 ----- */
+
   .hero {
-    grid-template-columns: 1fr auto;
-    align-items: end;
-    gap: 12px;
-    padding: 0 4px 14px;
+    padding: 16px 18px 18px;
+    margin-bottom: 14px;
+    color: #ffffff;
+    /* 由左上的藍色漸變到右下的藍綠色 */
+    background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
+    border-radius: 20px;
+    box-shadow: 0 10px 24px rgba(27, 95, 192, 0.22);
   }
 
-  .hero-label,
-  .hero-today {
-    color: var(--text-2);
+  .hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 0.8125rem;
   }
 
+  .hero-label {
+    opacity: 0.92;
+  }
+
+  /* 今天記錄了沒：已記錄是實心的標籤，還沒記錄是只有外框的標籤 */
+  .hero-chip {
+    padding: 1px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .hero-chip.done {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: transparent;
+  }
+
+  .hero-middle {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 2px 0 10px;
+  }
+
   .hero-value {
-    font-size: 3.25rem;
-    font-weight: 600;
+    font-size: 3.5rem;
+    font-weight: 700;
     line-height: 1.1;
+    letter-spacing: -0.02em;
   }
 
   .hero-unit {
     margin-left: 6px;
     font-size: 1rem;
-    font-weight: 400;
-    color: var(--text-2);
+    font-weight: 500;
+    letter-spacing: 0;
+    opacity: 0.9;
   }
 
-  .hero-side {
-    display: grid;
-    grid-template-columns: auto auto;
-    gap: 2px 10px;
-    margin: 0 0 2px;
-    font-size: 0.8125rem;
-  }
-
-  .hero-side dt {
-    color: var(--text-2);
-  }
-
-  .hero-side dd {
-    margin: 0;
+  /* 最近兩週的走勢小圖 */
+  .hero-trend {
+    flex: none;
+    margin-bottom: 6px;
+    font-size: 0.6875rem;
     text-align: right;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    opacity: 0.92;
   }
 
-  /* 記錄表單：KH 輸入框與儲存按鈕排在最上面，其他欄位收在「更多欄位」。
-     order 只改變畫面上的順序，HTML 裡的順序不變 */
+  .hero-trend svg {
+    display: block;
+    width: 120px;
+    height: 40px;
+    margin-bottom: 2px;
+  }
+
+  .hero-trend path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.85);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .hero-trend circle {
+    fill: #ffffff;
+  }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .hero-stats dt {
+    font-size: 0.75rem;
+    opacity: 0.85;
+  }
+
+  .hero-stats dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  /* ----- 記錄表單：KH 輸入框與儲存按鈕排在最上面，其他欄位收在「更多欄位」。
+         order 只改變畫面上的順序，HTML 裡的順序不變 ----- */
+
   .record-form {
     display: flex;
     flex-direction: column;
@@ -999,36 +1075,55 @@ a {
 
   .kh-input {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
   }
 
   .kh-input input {
     flex: 1;
     min-width: 0;
-    min-height: 64px;
-    font-size: 2rem;
-    font-weight: 600;
+    min-height: 66px;
+    border-radius: 16px;
+    font-size: 2.25rem;
+    font-weight: 700;
     text-align: center;
   }
 
   .kh-input input::placeholder {
-    font-size: 1.125rem;
+    font-size: 1.0625rem;
     font-weight: 400;
   }
 
+  /* 加減按鈕：圓形、主題色的淡底 */
   .stepper {
     display: block;
     flex: none;
-    width: 60px;
-    min-height: 64px;
+    width: 56px;
+    height: 56px;
+    min-height: 0;
+    padding: 0;
+    color: var(--accent-text);
+    background: var(--accent-soft);
+    border: 0;
+    border-radius: 50%;
     font-size: 1.75rem;
+    font-weight: 400;
     line-height: 1;
+  }
+
+  .stepper:hover {
+    background: var(--accent-soft);
   }
 
   .form-actions button {
     flex: 1 1 100%;
-    min-height: 52px;
+    min-height: 54px;
+    border-radius: 14px;
     font-size: 1.0625rem;
+  }
+
+  .form-actions button.primary {
+    box-shadow: 0 6px 14px rgba(31, 103, 200, 0.26);
   }
 
   .form-actions .message {
@@ -1041,16 +1136,21 @@ a {
     justify-content: space-between;
     gap: 12px;
     width: 100%;
-    min-height: 44px;
-    padding: 8px 12px;
+    min-height: 46px;
+    padding: 8px 14px;
     color: var(--text-2);
+    background: var(--field);
+    border: 0;
+    border-radius: 12px;
     font-size: 0.875rem;
+    font-weight: 400;
     text-align: left;
   }
 
   .more-label {
     flex: none;
-    color: var(--text);
+    color: var(--accent-fg);
+    font-weight: 500;
   }
 
   .more-label::after {
@@ -1061,7 +1161,8 @@ a {
     content: " ▴";
   }
 
-  /* 最近的紀錄 */
+  /* ----- 最近的紀錄 ----- */
+
   .recent-list {
     margin: 0;
     padding: 0;
@@ -1070,34 +1171,168 @@ a {
 
   .recent-list li {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 10px;
-    padding: 8px 0;
+    padding: 9px 0;
     border-bottom: 1px solid var(--grid);
     font-size: 0.9375rem;
   }
 
   .recent-list li:last-child {
+    padding-bottom: 0;
     border-bottom: 0;
   }
 
   .recent-date {
     flex: none;
-    width: 7.5em;
+    width: 6.6em;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
   }
 
-  .recent-list strong {
+  /* KH 數值放在有底色的小標籤裡 */
+  .recent-list strong,
+  .records-table td.cell-kh {
     flex: none;
-    width: 2.2em;
+    min-width: 3em;
+    padding: 1px 9px;
+    color: var(--accent-text);
+    background: var(--accent-soft);
+    border-radius: 8px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
+    text-align: center;
   }
 
   .recent-note {
     min-width: 0;
     color: var(--text-2);
     font-size: 0.8125rem;
+  }
+
+  /* ----- 紀錄表格改成一筆一塊：
+         第一行是日期、KH、編輯與刪除；第二行起是其他有內容的欄位 ----- */
+
+  .records-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%); /* 畫面上看不到，但螢幕閱讀器仍讀得到 */
+  }
+
+  .records-table,
+  .records-table tbody,
+  .records-table td {
+    display: block;
+  }
+
+  .records-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--grid);
+  }
+
+  /* 在「操作」後面插入一個占滿整列、沒有高度的空元素，強迫後面的欄位換到下一行 */
+  .records-table tr::after {
+    content: "";
+    order: 3;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .records-table td {
+    order: 4;
+    min-width: 0;
+    padding: 0;
+    color: var(--text-2);
+    border: 0;
+    font-size: 0.8125rem;
+    text-align: left;
+    white-space: normal;
+  }
+
+  /* 沒有內容的欄位不顯示 */
+  .records-table td:empty {
+    display: none;
+  }
+
+  .records-table td[data-label]::before {
+    content: attr(data-label) " ";
+  }
+
+  .records-table td[data-unit]::after {
+    content: " " attr(data-unit);
+  }
+
+  .records-table .cell-date {
+    order: 1;
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .records-table td.cell-kh {
+    order: 2;
+    font-size: 0.9375rem;
+  }
+
+  /* KH 已經用標籤呈現，不需要前面的「KH」字樣 */
+  .records-table td.cell-kh::before {
+    content: none;
+  }
+
+  .records-table .cell-actions {
+    order: 3;
+    margin-left: auto;
+  }
+
+  .records-table .cell-note {
+    order: 5;
+    flex-basis: 100%;
+    color: var(--text);
+    font-size: 0.875rem;
+  }
+
+  /* 手指點得到的按鈕大小 */
+  .records-table button.small {
+    min-height: 36px;
+    padding: 4px 14px;
+    font-size: 0.875rem;
+  }
+
+  /* 不納入統計的列：整列變淡，KH 標籤改成灰色 */
+  .records-table tr.not-counted td {
+    color: var(--muted);
+  }
+
+  .records-table tr.not-counted td.cell-kh {
+    color: var(--muted);
+    background: var(--field);
+  }
+
+  tr.editing td {
+    background: none;
+  }
+
+  .records-table tr.editing {
+    margin: 0 -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    background: var(--accent-soft);
+    border-radius: 10px;
+  }
+
+  .records-table tr.editing td.cell-kh {
+    background: var(--surface);
+  }
+
+  .analysis-list {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   }
 
   /* 手指點得到的大小 */
@@ -1110,10 +1345,15 @@ a {
   .button-row button,
   .token-row button,
   .show-all {
-    min-height: 44px;
+    min-height: 46px;
   }
 
-  /* 底部分頁列：固定在畫面最下方 */
+  .range-buttons button {
+    min-height: 34px;
+  }
+
+  /* ----- 底部分頁列：固定在畫面最下方，半透明，後面的內容會模糊 ----- */
+
   .tab-bar {
     display: flex;
     position: fixed;
@@ -1121,8 +1361,10 @@ a {
     right: 0;
     bottom: 0;
     z-index: 10;
-    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    background: var(--surface);
+    padding: 4px env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
     border-top: 1px solid var(--border);
   }
 
@@ -1133,18 +1375,27 @@ a {
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-height: 56px;
-    padding: 6px 0 4px;
-    color: var(--text-2);
+    min-height: 58px;
+    padding: 4px 0;
+    color: var(--muted);
     background: none;
     border: 0;
     border-radius: 0;
     font-size: 0.6875rem;
+    font-weight: 500;
   }
 
+  .tab-bar button:active:not(:disabled) {
+    transform: none;
+  }
+
+  /* 圖示外面有一個膠囊形的區域，目前所在的分頁會填上底色 */
   .tab-bar svg {
-    width: 24px;
-    height: 24px;
+    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
+    padding: 4px 18px;
+    border-radius: 999px;
     fill: none;
     stroke: currentColor;
     stroke-width: 2;
@@ -1152,9 +1403,33 @@ a {
     stroke-linejoin: round;
   }
 
-  /* 目前所在的分頁 */
   .tab-bar button[aria-current="page"] {
-    color: var(--kh);
-    font-weight: 600;
+    color: var(--accent-fg);
+    font-weight: 700;
+  }
+
+  .tab-bar button[aria-current="page"] svg {
+    background: var(--accent-soft);
+  }
+}
+
+/* 不支援 color-mix 的舊瀏覽器：分頁列用不透明的底色 */
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .tab-bar {
+    background: var(--surface);
+  }
+}
+
+/* 切換分頁時淡入。使用者在系統設定裡要求減少動態效果時不套用 */
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+  main > [data-view] {
+    animation: fade-in 0.18s ease-out;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
   }
 }

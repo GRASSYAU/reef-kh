@@ -2,7 +2,7 @@
 // 這個檔案只負責「顯示」，不會修改資料
 
 import {
-  DAY_MS, latestKhDay, averageKh, currentDose, isStandard, isCounted, methodLabel, waterChangeLiters,
+  DAY_MS, latestKhDay, averageKh, trailingAverages, currentDose, isStandard, isCounted, methodLabel, waterChangeLiters,
   formatKh, formatDelta, formatShortDate, formatDateWithWeekday,
 } from './data.js';
 import {
@@ -92,31 +92,72 @@ export function renderTiles(container, days) {
 }
 
 
-// ===== 手機「記錄」分頁最上方的摘要 =====
+// ===== 手機「記錄」分頁最上方的摘要卡片 =====
+
+// 最近兩週的走勢小圖：把近 7 天平均畫成一條線，最後一點加上圓點
+function createSparkline(days) {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const width = 120;
+  const height = 40;
+  const pad = 4; // 四周留一點距離，線與圓點才不會被切掉
+
+  const averages = trailingAverages(days).filter((value) => value !== null).slice(-14);
+  const wrap = el('div', 'hero-trend');
+  if (averages.length < 2) {
+    return wrap; // 資料太少畫不出線，留空
+  }
+
+  const min = Math.min(...averages);
+  const max = Math.max(...averages);
+  const x = (i) => pad + (i / (averages.length - 1)) * (width - pad * 2);
+  // 數值都一樣時畫在正中間；否則最小值在下、最大值在上
+  const y = (value) => (max === min ? height / 2 : height - pad - ((value - min) / (max - min)) * (height - pad * 2));
+
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('aria-hidden', 'true'); // 裝飾用，完整的圖在「趨勢」分頁
+
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', averages.map((value, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(value).toFixed(1)}`).join(' '));
+  const dot = document.createElementNS(SVG_NS, 'circle');
+  dot.setAttribute('cx', x(averages.length - 1));
+  dot.setAttribute('cy', y(averages[averages.length - 1]));
+  dot.setAttribute('r', 3.5);
+  svg.append(path, dot);
+
+  wrap.append(svg, '近兩週的平均');
+  return wrap;
+}
 
 // today：今天的日期（'YYYY-MM-DD'），用來顯示今天記錄了沒
 export function renderHero(container, days, today) {
   const latest = latestKhDay(days);
   container.replaceChildren();
 
-  // 左邊：最新的 KH，以及今天是否已經記錄
-  const main = el('div', 'hero-main');
-  main.appendChild(el('div', 'hero-label', `最新 KH · ${formatShortDate(latest.date)}`));
+  // 第一列：標題，以及今天記錄了沒
+  const top = el('div', 'hero-top');
+  const todayDay = days.find((day) => day.date === today);
+  top.append(
+    el('span', 'hero-label', `最新 KH · ${formatShortDate(latest.date)}`),
+    el(
+      'span',
+      todayDay ? 'hero-chip done' : 'hero-chip',
+      todayDay ? `✓ 今天已記錄 ${todayDay.records.length} 筆` : '今天還沒記錄',
+    ),
+  );
+
+  // 第二列：最新的 KH，右邊是走勢小圖
+  const middle = el('div', 'hero-middle');
   const value = el('div', 'hero-value', formatKh(latest.kh));
   value.appendChild(el('span', 'hero-unit', 'dKH'));
-  main.appendChild(value);
+  middle.append(value, createSparkline(days));
 
-  const todayDay = days.find((day) => day.date === today);
-  main.appendChild(el(
-    'div',
-    'hero-today',
-    todayDay ? `✓ 今天已記錄 ${todayDay.records.length} 筆` : '今天還沒記錄',
-  ));
-
-  // 右邊：三個小數字
-  const side = el('dl', 'hero-side');
+  // 第三列：三個小數字
+  const stats = el('dl', 'hero-stats');
   const addStat = (term, text) => {
-    side.append(el('dt', '', term), el('dd', '', text));
+    const item = el('div');
+    item.append(el('dt', '', term), el('dd', '', text));
+    stats.appendChild(item);
   };
   const gap = TARGET_KH - latest.kh;
   addStat(`目標 ${formatKh(TARGET_KH)}`, gap > 0.005 ? `還差 ${formatKh(gap)}` : '已達標');
@@ -126,7 +167,7 @@ export function renderHero(container, days, today) {
     addStat('添加量', `${dose.dose} mL／天`);
   }
 
-  container.append(main, side);
+  container.append(top, middle, stats);
 }
 
 

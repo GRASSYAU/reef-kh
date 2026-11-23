@@ -7,7 +7,7 @@
 //
 // 只處理這個網站自己的檔案。對 GitHub API 的連線（讀寫資料檔）不經過這裡，也不會被快取。
 
-const CACHE = 'reef-kh-v1';
+const CACHE = 'reef-kh-v2';
 const NETWORK_TIMEOUT_MS = 4000; // 已經有快取時，網路等超過這個時間就先用快取
 
 // 第一次安裝時先存好的檔案，確保安裝完就能離線開啟
@@ -16,6 +16,7 @@ const CORE_FILES = [
   'index.html',
   'manifest.json',
   'css/style.css',
+  'fonts/figtree-latin-wght-normal.woff2',
   'js/app.js',
   'js/analysis.js',
   'js/chart.js',
