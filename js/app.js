@@ -4,11 +4,12 @@ import { loadRecords, buildDays, latestKhDay, currentDose, isCounted, formatShor
 import { renderCharts } from './chart.js';
 import { renderTiles, renderAnalysis, renderMethods, renderTable, windowOptions } from './render.js';
 import {
-  emptyChanges, loadChanges, saveChanges, countChanges, describeChanges,
-  applyChanges, cleanChanges, upgradeChanges, isSameRecord,
+  CHANGES_KEY, createId, withIds, isSameContent,
+  emptyChanges, loadChanges, saveChanges, migrateLegacyChanges, countChanges, describeChanges,
+  upsertRecord, deleteRecord, applyChanges, cleanChanges,
   toJsonText, toCsvText, downloadText,
 } from './storage.js';
-import { getToken, saveToken, removeToken, fetchRemoteRecords, pushRemoteRecords } from './github.js';
+import { TOKEN_KEY, getToken, saveToken, removeToken, fetchRemoteRecords, pushRemoteRecords } from './github.js';
 import { TARGET_KH, TANK_LITERS } from './config.js';
 
 const TABLE_LIMIT = 30;            // 表格預設只顯示最新的幾筆
@@ -40,13 +41,15 @@ const windowSelect = $('#window-select');
 const reachDaysInput = $('#reach-days');
 
 // 畫面顯示的資料 = 資料檔裡的紀錄 + 在瀏覽器裡做的變更
-let fileRecords = [];          // 資料檔裡的紀錄（來自網站上的檔案，或 GitHub 上的最新版本）
+let base = [];                 // 資料檔裡的紀錄（來自網站上的檔案，或 GitHub 上的最新版本）
 let source = 'file';           // 資料檔的來源：'file' 或 'github'
+let baseIsLatest = true;       // 手上的資料檔是不是最新版本。讀不到 GitHub 而改用網站上的檔案時是 false
 let changes = emptyChanges();  // 尚未儲存的新增、修改、刪除
 let records = [];              // 套用變更後的所有紀錄（畫面上顯示的就是這份）
-let origin = new Map();        // 每一筆紀錄的來源：資料檔、新增的、還是修改過的
+let kinds = new Map();         // 每筆紀錄的狀態：跟資料檔一樣、新增的、還是修改過的
 let days = [];                 // 由 records 整理出來的每日資料
-let editing = null;            // 正在編輯的那一筆；null 代表目前是「新增」模式
+let editingId = null;          // 正在編輯的紀錄的 id；null 代表目前是「新增」模式
+let defaultDate = '';          // 表單自動帶入的日期，用來判斷使用者有沒有自己改過
 let charts = null;             // 圖表只建立一次，之後用 charts.update() 重畫
 let rangeDays = DEFAULT_RANGE; // 圖表顯示最近幾天；0 代表全部
 let showAllRows = false;       // 表格是否顯示全部紀錄
@@ -57,11 +60,11 @@ let syncing = false;           // 是否正在同步
 
 // 資料有任何變動（載入完成、新增、修改、刪除、同步）都呼叫這個函式
 function refresh() {
-  ({ records, origin } = applyChanges(fileRecords, changes));
+  ({ records, kinds } = applyChanges(base, changes));
   days = buildDays(records);
 
-  // 正在編輯的紀錄如果已經不存在（例如同步後資料更新了），就回到新增模式
-  if (editing !== null && !origin.has(editing)) {
+  // 正在編輯的紀錄如果已經不存在（例如在另一個分頁被刪除了），就回到新增模式
+  if (editingId !== null && !records.some((record) => record.id === editingId)) {
     resetForm();
   }
 
@@ -103,11 +106,11 @@ function refresh() {
 
 function renderRecordsTable() {
   renderTable(tbody, records, {
-    origin,
-    editing,
+    kinds,
+    editingId,
     limit: showAllRows ? 0 : TABLE_LIMIT,
     onEdit: startEdit,
-    onDelete: deleteRecord,
+    onDelete: handleDelete,
   });
   showAllButton.hidden = showAllRows || records.length <= TABLE_LIMIT;
   showAllButton.textContent = `顯示全部 ${records.length} 筆`;
@@ -138,6 +141,7 @@ function renderAnalysisSection() {
 function renderSaveArea() {
   const count = countChanges(changes);
   const hasToken = getToken() !== '';
+  const detail = describeChanges(base, changes);
 
   discardButton.hidden = count === 0;
   syncButton.hidden = !hasToken;
@@ -148,15 +152,18 @@ function renderSaveArea() {
       ? '所有紀錄都已同步到 GitHub。'
       : '所有紀錄都已寫入 data/kh-records.json。';
   } else if (hasToken) {
-    exportInfo.textContent = `有 ${count} 項變更尚未同步到 GitHub（${describeChanges(changes)}）。`;
+    exportInfo.textContent = `有 ${count} 項變更尚未同步到 GitHub（${detail}）。`;
   } else {
-    exportInfo.textContent =
-      `有 ${count} 項變更只存在這個瀏覽器（${describeChanges(changes)}），尚未寫入 data/kh-records.json。`;
+    exportInfo.textContent = `有 ${count} 項變更只存在這個瀏覽器（${detail}），尚未寫入 data/kh-records.json。`;
   }
 }
 
-// 存檔並重畫；回傳是否成功存入瀏覽器
-function saveAndRefresh() {
+// 變更之後：整理暫存、存檔並重畫。回傳是否成功存入瀏覽器
+function commitChanges() {
+  // 手上的資料檔是最新版本時，把「改回跟資料檔一樣」這類已經不算變更的項目清掉
+  if (baseIsLatest) {
+    cleanChanges(base, changes);
+  }
   const saved = saveChanges(changes);
   refresh();
   return saved;
@@ -207,14 +214,14 @@ function defaultMethod() {
 
 // 回到「新增」模式：清空表單，預設今天的日期、目前的添加量、最近常用的測試方式
 function resetForm() {
-  editing = null;
+  editingId = null;
   form.reset();
   const fields = form.elements;
-  fields.date.value = todayText();
+  defaultDate = todayText();
+  fields.date.value = defaultDate;
 
   const dose = currentDose(days);
   fields.dose_ml.value = dose ? dose.dose : '';
-
   fields.method.value = defaultMethod();
 
   formTitle.textContent = '新增紀錄';
@@ -223,9 +230,19 @@ function resetForm() {
   updateFormState();
 }
 
+// 頁面開著過了午夜，表單上自動帶入的日期還是昨天。
+// 回到這個頁面或點進表單時檢查一次：使用者沒改過日期的話，更新成今天
+function refreshDefaultDate() {
+  const today = todayText();
+  if (editingId === null && form.elements.date.value === defaultDate && defaultDate !== today) {
+    defaultDate = today;
+    form.elements.date.value = today;
+  }
+}
+
 // 進入「編輯」模式：把這筆紀錄的內容填進表單
 function startEdit(record) {
-  editing = record;
+  editingId = record.id;
   const fields = form.elements;
   fields.date.value = record.date;
   fields.time.value = record.time ?? '';
@@ -256,7 +273,7 @@ function cancelEdit() {
   showMessage(formMessage, '已取消編輯。');
 }
 
-// 把表單欄位的內容組成一筆紀錄
+// 把表單欄位的內容組成一筆紀錄（還沒有 id）
 function readForm() {
   // 從表單欄位讀出的值都是字串，數字要自己用 Number() 轉換
   const fields = form.elements;
@@ -293,34 +310,30 @@ function handleSubmit(event) {
     return;
   }
   const record = readForm();
+  const current = records.find((item) => item.id === editingId) ?? null; // 正在編輯的那一筆
 
   // 必填、數值範圍已由 HTML 的 required、min、max 檢查，這裡補上其餘的檢查
   if (record.date > todayText()) {
     showMessage(formMessage, '日期不能是未來的日期。', true);
     return;
   }
-  if (editing && isSameRecord(editing, record)) {
+  if (current !== null && isSameContent(current, record)) {
     resetForm();
     renderRecordsTable();
     showMessage(formMessage, '內容沒有變更。');
     return;
   }
-  if (records.some((existing) => existing !== editing && isSameRecord(existing, record))) {
+  if (records.some((existing) => existing.id !== editingId && isSameContent(existing, record))) {
     showMessage(formMessage, '已經有一筆內容完全相同的紀錄。', true);
     return;
   }
 
-  const wasEditing = editing !== null;
-  if (wasEditing) {
-    applyEdit(editing, record);
-  } else {
-    changes.added.push(record);
-  }
-
-  const saved = saveAndRefresh();
+  // 編輯沿用原本的 id，新增則產生新的 id
+  upsertRecord(changes, { id: current !== null ? current.id : createId(), ...record });
+  const saved = commitChanges();
   resetForm();
   renderRecordsTable();
-  if (!wasEditing) {
+  if (current === null) {
     form.elements.kh.focus();
   }
 
@@ -329,54 +342,23 @@ function handleSubmit(event) {
     showMessage(formMessage, '已套用，但瀏覽器無法儲存，重新整理後會消失，請立即同步或匯出 JSON。', true);
   } else {
     const reminder = getToken() !== '' ? '記得按「同步到 GitHub」。' : '';
-    showMessage(formMessage, `${wasEditing ? '已修改' : '已新增'} ${name}。${reminder}`);
+    showMessage(formMessage, `${current !== null ? '已修改' : '已新增'} ${name}。${reminder}`);
   }
 }
 
-
-// ===== 修改與刪除 =====
-
-// 依紀錄的來源，把修改記到對應的變更清單
-function applyEdit(record, updated) {
-  const from = origin.get(record);
-
-  if (from.kind === 'added') {
-    // 還沒儲存的新增紀錄：直接換成新內容
-    changes.added[changes.added.indexOf(record)] = updated;
-  } else if (from.kind === 'replaced') {
-    // 之前改過的：更新修改後的內容；如果改回跟資料檔一樣，就等於沒改
-    if (isSameRecord(from.entry.from, updated)) {
-      changes.replaced = changes.replaced.filter((entry) => entry !== from.entry);
-    } else {
-      from.entry.to = updated;
-    }
-  } else {
-    // 資料檔裡的紀錄：記下「從哪一筆改成什麼」
-    changes.replaced.push({ from: record, to: updated });
-  }
-}
-
-function deleteRecord(record) {
+function handleDelete(record) {
   if (blockedBySync()) {
     return;
   }
   if (!confirm(`確定要刪除 ${record.date} KH ${record.kh.toFixed(1)} 這筆紀錄嗎？`)) {
     return;
   }
-  const from = origin.get(record);
 
-  if (from.kind === 'added') {
-    // filter：留下「不是這一筆」的紀錄，等於把它刪掉
-    changes.added = changes.added.filter((item) => item !== record);
-  } else if (from.kind === 'replaced') {
-    // 改過又刪除：取消修改，並把資料檔裡原本那筆記為刪除
-    changes.replaced = changes.replaced.filter((entry) => entry !== from.entry);
-    changes.removed.push(from.entry.from);
-  } else {
-    changes.removed.push(record);
-  }
-
-  saveAndRefresh();
+  // 資料檔裡有這一筆，就要記下「這個 id 要刪除」；還沒儲存過的新紀錄，直接拿掉即可。
+  // 手上的資料檔不是最新版本時，無法確定它是不是已經寫入，一律記下來比較保險
+  const inBase = base.some((item) => item.id === record.id);
+  deleteRecord(changes, record.id, inBase || !baseIsLatest);
+  commitChanges();
   showMessage(formMessage, '已刪除。儲存前可用「捨棄未儲存的變更」復原。');
 }
 
@@ -388,7 +370,7 @@ function handleDiscard() {
     return;
   }
   changes = emptyChanges();
-  saveAndRefresh();
+  commitChanges();
   resetForm();
   renderRecordsTable();
   showMessage(formMessage, '已捨棄所有未儲存的變更。');
@@ -403,6 +385,12 @@ function renderTokenState() {
     ? '已設定權杖，這個瀏覽器可以直接讀寫 GitHub 上的資料。'
     : '尚未設定權杖。';
   tokenRemoveButton.hidden = !hasToken;
+}
+
+// 讀取 GitHub 上最新的資料檔，並確保每一筆都有 id
+async function readRemote(token) {
+  const remote = await fetchRemoteRecords(token);
+  return { records: withIds(remote.records), sha: remote.sha };
 }
 
 // 「儲存並測試」：先用權杖讀一次資料檔，成功才存起來
@@ -455,18 +443,20 @@ async function handleSync() {
   syncing = true;
   renderSaveArea();
   showMessage(syncMessage, '同步中…');
+  const time = () => new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+
   try {
     // 最多試 3 次：如果讀取之後、寫入之前，剛好有其他裝置改了檔案（409），就重新讀取再套用一次
     for (let attempt = 1; ; attempt++) {
-      const remote = await fetchRemoteRecords(token);
-      upgradeChanges(remote.records, changes);
+      const remote = await readRemote(token);
       const merged = applyChanges(remote.records, changes).records;
       const text = toJsonText(merged);
 
       try {
         // 內容跟 GitHub 上的一樣時（例如另一台裝置已經同步過），不需要再提交
         if (text !== toJsonText(remote.records)) {
-          await pushRemoteRecords(token, text, remote.sha, `更新 KH 紀錄（${describeChanges(changes)}）`);
+          const message = `更新 KH 紀錄（${describeChanges(remote.records, changes)}）`;
+          await pushRemoteRecords(token, text, remote.sha, message);
         }
       } catch (error) {
         if (error.status === 409 && attempt < 3) {
@@ -475,18 +465,37 @@ async function handleSync() {
         throw error;
       }
 
-      fileRecords = merged;
+      base = merged;
       source = 'github';
+      baseIsLatest = true;
       break;
     }
 
-    // 已經寫進資料檔的變更從暫存移除；同步期間新增的變更會留著
-    cleanChanges(fileRecords, changes);
+    // 已經寫進資料檔的變更從暫存移除
+    cleanChanges(base, changes);
     saveChanges(changes);
-    const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-    showMessage(syncMessage, `已同步到 GitHub（${time}）。`);
+    showMessage(syncMessage, `已同步到 GitHub（${time()}）。`);
   } catch (error) {
-    showMessage(syncMessage, `同步失敗：${error.message}變更仍保留在這個瀏覽器。`, true);
+    // 連線中斷或伺服器錯誤時，不確定最後一次寫入有沒有成功。
+    // 重新讀一次 GitHub 上的內容來確認，以實際的內容為準
+    let confirmed = false;
+    if (error.status === 0 || error.status >= 500) {
+      try {
+        base = (await readRemote(token)).records;
+        source = 'github';
+        baseIsLatest = true;
+        cleanChanges(base, changes);
+        saveChanges(changes);
+        confirmed = countChanges(changes) === 0;
+      } catch (retryError) {
+        baseIsLatest = false; // 連讀都讀不到：手上的資料檔可能已經不是最新的
+      }
+    }
+    if (confirmed) {
+      showMessage(syncMessage, `已同步到 GitHub（${time()}）。寫入時連線曾中斷，已重新確認內容正確。`);
+    } else {
+      showMessage(syncMessage, `同步失敗：${error.message}變更仍保留在這個瀏覽器。`, true);
+    }
   } finally {
     syncing = false;
     refresh();
@@ -543,22 +552,25 @@ async function loadData() {
 
   if (token !== '') {
     try {
-      fileRecords = (await fetchRemoteRecords(token)).records;
+      base = (await readRemote(token)).records;
       source = 'github';
+      baseIsLatest = true;
       loaded = true;
     } catch (error) {
       warning = `無法從 GitHub 讀取最新資料（${error.message}）目前顯示的是網站上的資料檔，可能不是最新的。`;
     }
   }
   if (!loaded) {
-    fileRecords = await loadRecords();
+    base = withIds(await loadRecords());
     source = 'file';
+    // 有權杖卻讀不到 GitHub：網站上的檔案可能比 GitHub 上的舊，不能拿來判斷哪些變更已經寫入
+    baseIsLatest = token === '';
   }
 
-  // 整理暫存的變更：先把舊版格式對應到現在的欄位，再移除已經寫進資料檔的項目
-  const upgraded = upgradeChanges(fileRecords, changes);
-  const cleaned = cleanChanges(fileRecords, changes);
-  if (upgraded || cleaned) {
+  // 整理暫存的變更：舊版格式轉成新格式，並移除已經寫進資料檔的項目
+  const migrated = migrateLegacyChanges(base, changes);
+  const cleaned = baseIsLatest && cleanChanges(base, changes);
+  if (migrated || cleaned) {
     saveChanges(changes);
   }
 
@@ -570,7 +582,8 @@ async function loadData() {
 function showLoadError(error) {
   // 讀檔失敗、JSON 格式錯誤、欄位缺漏，都會跑到這裡
   console.error(error);
-  fileRecords = [];
+  base = [];
+  baseIsLatest = false;
   refresh();
   statusEl.textContent = `資料載入失敗：${error.message}`;
   statusEl.classList.add('error');
@@ -582,6 +595,7 @@ async function init() {
 
   // 先綁定所有按鈕與欄位的事件。就算資料載入失敗，設定權杖等功能還是要能用
   form.addEventListener('submit', handleSubmit);
+  form.addEventListener('focusin', refreshDefaultDate);
   form.elements.type.addEventListener('change', updateFormState);
   form.elements.water_change_l.addEventListener('input', updateFormState);
   cancelButton.addEventListener('click', cancelEdit);
@@ -601,6 +615,26 @@ async function init() {
   // 改變計算區間或天數時，只需要重算分析的部分
   windowSelect.addEventListener('change', renderAnalysisSection);
   reachDaysInput.addEventListener('input', renderAnalysisSection);
+
+  // 回到這個頁面時（例如手機重新打開瀏覽器），更新表單的預設日期
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshDefaultDate();
+    }
+  });
+  window.addEventListener('focus', refreshDefaultDate);
+
+  // 同一個瀏覽器的另一個分頁改了暫存的變更或權杖時，這個分頁跟著更新，避免互相覆蓋
+  window.addEventListener('storage', (event) => {
+    if (event.key === CHANGES_KEY && !syncing) {
+      changes = loadChanges();
+      refresh();
+    }
+    if (event.key === TOKEN_KEY) {
+      renderTokenState();
+      renderSaveArea();
+    }
+  });
 
   setRange(readStoredRange());
   renderTokenState();

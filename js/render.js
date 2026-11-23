@@ -259,7 +259,7 @@ export function renderAnalysis(els, days, { windowValue, reachDays }) {
     addUsage(
       '換水補充（估計）',
       `${formatSigned(main.waterSupply)} dKH／天`,
-      main.changeCount > 0 ? `區間內換水 ${main.changeCount} 次，共 ${main.liters} L` : '區間內沒有換水',
+      main.changeCount > 0 ? `第一筆讀值之後換水 ${main.changeCount} 次，共 ${main.liters} L` : '第一筆讀值之後沒有換水',
     );
   }
   addUsage('KH 平均變化', `${formatSigned(main.change)} dKH／天`, '補充的量減去消耗的量');
@@ -382,9 +382,9 @@ function createButton(text, label, onClick) {
   return button;
 }
 
-// origin：每一筆紀錄的來源（資料檔、新增的、修改過的）；editing：正在編輯的那一筆
+// kinds：每個 id 的狀態（跟資料檔一樣、新增的、修改過的）；editingId：正在編輯的那一筆的 id
 // limit：最多顯示幾筆，0 代表全部；onEdit、onDelete：按下按鈕時要呼叫的函式
-export function renderTable(tbody, records, { origin, editing, limit, onEdit, onDelete }) {
+export function renderTable(tbody, records, { kinds, editingId, limit, onEdit, onDelete }) {
   tbody.replaceChildren();
 
   // 最新的排在最上面。slice() 先複製一份再反轉，不會改到原本的陣列
@@ -404,13 +404,13 @@ export function renderTable(tbody, records, { origin, editing, limit, onEdit, on
     if (states.length > 0) {
       tr.classList.add('not-counted');
     }
-    const kind = origin.get(record).kind;
+    const kind = kinds.get(record.id);
     if (kind === 'added') {
       states.push('新增，尚未儲存');
-    } else if (kind === 'replaced') {
+    } else if (kind === 'modified') {
       states.push('已修改，尚未儲存');
     }
-    if (record === editing) {
+    if (record.id === editingId) {
       tr.classList.add('editing');
     }
 

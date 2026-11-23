@@ -433,7 +433,7 @@ export function renderCharts({ khBox, doseBox, area, tooltip, legend, target }) 
 
     // Y 軸範圍：上下各多留一點，取到 2 的倍數
     const doses = steps.map((day) => day.doseInForce);
-    const min = Math.floor((Math.min(...doses) - 1) / 2) * 2;
+    const min = Math.max(0, Math.floor((Math.min(...doses) - 1) / 2) * 2);
     const max = Math.ceil((Math.max(...doses) + 1) / 2) * 2;
     const y = scale(min, max, bottom, top);
 
@@ -558,7 +558,7 @@ export function renderCharts({ khBox, doseBox, area, tooltip, legend, target }) 
     }
 
     // 當天有多筆紀錄或有備註時，逐筆列出
-    const hasDetail = day.records.length > 1 || day.records[0].note !== '';
+    const hasDetail = day.records.length > 1 || (day.records[0].note ?? '') !== '';
     if (hasDetail) {
       const list = htmlEl('ul', 'tip-list');
       day.records.forEach((record) => {
@@ -574,7 +574,7 @@ export function renderCharts({ khBox, doseBox, area, tooltip, legend, target }) 
         }
         let text = formatKh(record.kh);
         text += tags.length > 0 ? `（${tags.join('，')}）` : ' ';
-        text += record.note;
+        text += record.note ?? '';
         list.appendChild(htmlEl('li', '', text));
       });
       tooltip.appendChild(list);

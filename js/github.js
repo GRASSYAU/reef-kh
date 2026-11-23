@@ -9,7 +9,7 @@
 
 import { GITHUB } from './config.js';
 
-const TOKEN_KEY = 'reef-kh:github-token';
+export const TOKEN_KEY = 'reef-kh:github-token';
 const API_ROOT = 'https://api.github.com';
 const TIMEOUT_MS = 15000; // 等待 GitHub 回應的時間上限
 
@@ -69,9 +69,8 @@ async function request(token, url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  let response;
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       ...options,
       cache: 'no-store', // 不使用快取，確保拿到的是最新內容
       signal: controller.signal,
@@ -81,16 +80,20 @@ async function request(token, url, options = {}) {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       },
     });
+    if (!response.ok) {
+      throw new GitHubError(statusMessage(response.status), response.status);
+    }
+    // 回應的內容也要在時間上限內讀完，所以計時器要等這一步完成才停
+    return await response.json();
   } catch (error) {
-    throw new GitHubError('無法連線到 GitHub，請檢查網路。', 0);
+    if (error instanceof GitHubError) {
+      throw error;
+    }
+    // 其餘的錯誤（連不上、逾時被中止、內容讀到一半斷線）都當成連線問題
+    throw new GitHubError('無法連線到 GitHub，或等待回應逾時，請檢查網路。', 0);
   } finally {
     clearTimeout(timer);
   }
-
-  if (!response.ok) {
-    throw new GitHubError(statusMessage(response.status), response.status);
-  }
-  return response.json();
 }
 
 function fileUrl() {
