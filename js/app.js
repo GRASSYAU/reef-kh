@@ -1,406 +1,158 @@
-// 主程式：讀取資料，然後更新統計卡片、圖表與表格，並處理紀錄的新增、編輯與刪除
+// 主程式：管理資料狀態，處理表單、同步與匯出，並在資料變動時更新整個畫面
 
-import {
-  loadRecords, buildDays, averageKh, currentDose,
-  isStandard, isCounted, formatKh, formatDelta, formatShortDate,
-} from './data.js';
+import { loadRecords, buildDays, latestKhDay, currentDose, isCounted, formatShortDate } from './data.js';
 import { renderCharts } from './chart.js';
-import { analyzeConsumption } from './analysis.js';
-import { TARGET_KH, TANK_LITERS, PRODUCT, DILUTION, CALIBRATION, khPerMl } from './config.js';
+import { renderTiles, renderAnalysis, renderMethods, renderTable, windowOptions } from './render.js';
 import {
-  emptyChanges, loadChanges, saveChanges, isSameRecord, toJsonText, downloadText,
+  emptyChanges, loadChanges, saveChanges, countChanges, describeChanges,
+  applyChanges, cleanChanges, upgradeChanges, isSameRecord,
+  toJsonText, toCsvText, downloadText,
 } from './storage.js';
+import { getToken, saveToken, removeToken, fetchRemoteRecords, pushRemoteRecords } from './github.js';
+import { TARGET_KH, TANK_LITERS } from './config.js';
 
-const statusEl = document.querySelector('#status');
-const tilesEl = document.querySelector('#tiles');
-const tbody = document.querySelector('#kh-body');
-const form = document.querySelector('#record-form');
-const formMessage = document.querySelector('#form-message');
-const exportInfo = document.querySelector('#export-info');
-const exportButton = document.querySelector('#export-button');
-const discardButton = document.querySelector('#discard-button');
-const formTitle = document.querySelector('#form-title');
-const submitButton = document.querySelector('#submit-button');
-const cancelButton = document.querySelector('#cancel-button');
-const windowSelect = document.querySelector('#window-select');
-const reachDaysInput = document.querySelector('#reach-days');
-const analysisMessage = document.querySelector('#analysis-message');
-const analysisResult = document.querySelector('#analysis-result');
-const analysisBasis = document.querySelector('#analysis-basis');
+const TABLE_LIMIT = 30;            // 表格預設只顯示最新的幾筆
+const RANGE_KEY = 'reef-kh:range'; // 記住上次選的圖表時間範圍
+const DEFAULT_RANGE = 90;
 
-// 畫面顯示的資料 = 檔案裡的紀錄 + 在瀏覽器裡做的變更
-let fileRecords = [];          // data/kh-records.json 裡的紀錄
-let changes = emptyChanges();  // 尚未寫入檔案的新增、修改、刪除
+const $ = (selector) => document.querySelector(selector);
+
+const statusEl = $('#status');
+const tilesEl = $('#tiles');
+const tbody = $('#kh-body');
+const showAllButton = $('#show-all-button');
+const form = $('#record-form');
+const formTitle = $('#form-title');
+const formMessage = $('#form-message');
+const submitButton = $('#submit-button');
+const cancelButton = $('#cancel-button');
+const exportInfo = $('#export-info');
+const syncButton = $('#sync-button');
+const syncMessage = $('#sync-message');
+const discardButton = $('#discard-button');
+const tokenInput = $('#token-input');
+const tokenSaveButton = $('#token-save-button');
+const tokenRemoveButton = $('#token-remove-button');
+const tokenState = $('#token-state');
+const tokenMessage = $('#token-message');
+const rangeButtons = document.querySelectorAll('[data-range]');
+const windowSelect = $('#window-select');
+const reachDaysInput = $('#reach-days');
+
+// 畫面顯示的資料 = 資料檔裡的紀錄 + 在瀏覽器裡做的變更
+let fileRecords = [];          // 資料檔裡的紀錄（來自網站上的檔案，或 GitHub 上的最新版本）
+let source = 'file';           // 資料檔的來源：'file' 或 'github'
+let changes = emptyChanges();  // 尚未儲存的新增、修改、刪除
 let records = [];              // 套用變更後的所有紀錄（畫面上顯示的就是這份）
-let origin = new Map();        // 每一筆紀錄的來源：檔案、新增的、還是修改過的
+let origin = new Map();        // 每一筆紀錄的來源：資料檔、新增的、還是修改過的
+let days = [];                 // 由 records 整理出來的每日資料
 let editing = null;            // 正在編輯的那一筆；null 代表目前是「新增」模式
 let charts = null;             // 圖表只建立一次，之後用 charts.update() 重畫
-
-
-// ===== 把變更套用到檔案紀錄上 =====
-
-function buildRecords() {
-  origin = new Map();
-  const result = [];
-  const removed = changes.removed.slice(); // 複製一份，比對到一筆就拿掉一筆
-
-  fileRecords.forEach((record) => {
-    // 被刪除的：跳過
-    const removedIndex = removed.findIndex((item) => isSameRecord(item, record));
-    if (removedIndex !== -1) {
-      removed.splice(removedIndex, 1);
-      return;
-    }
-    // 被修改的：在原本的位置放入修改後的內容
-    const entry = changes.replaced.find((item) => isSameRecord(item.from, record));
-    if (entry) {
-      result.push(entry.to);
-      origin.set(entry.to, { kind: 'replaced', entry });
-      return;
-    }
-    result.push(record);
-    origin.set(record, { kind: 'file' });
-  });
-
-  // 新增的：接在後面
-  changes.added.forEach((record) => {
-    result.push(record);
-    origin.set(record, { kind: 'added' });
-  });
-
-  // 依日期排序，同一天的維持原本的先後順序
-  return result.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-// 檔案更新後（例如匯出並取代了檔案），把已經寫入檔案的變更從暫存移除
-function cleanChanges() {
-  const inFile = (record) => fileRecords.some((item) => isSameRecord(item, record));
-  const before = JSON.stringify(changes);
-
-  changes.added = changes.added.filter((record) => !inFile(record));
-  changes.removed = changes.removed.filter(inFile);
-  changes.replaced = changes.replaced.filter((entry) => {
-    if (inFile(entry.from)) {
-      return true; // 檔案裡還是舊內容，修改尚未寫入
-    }
-    if (!inFile(entry.to)) {
-      changes.added.push(entry.to); // 原本的那筆已不在檔案裡，修改後的內容改當成新增
-    }
-    return false;
-  });
-
-  if (JSON.stringify(changes) !== before) {
-    saveChanges(changes);
-  }
-}
-
-function changeCount() {
-  return changes.added.length + changes.removed.length + changes.replaced.length;
-}
-
-
-// ===== 統計卡片 =====
-
-// 建立一張卡片：標題、主要數值、單位、補充說明
-function createTile(label, value, unit, sub) {
-  const tile = document.createElement('div');
-  tile.className = 'tile';
-
-  const labelEl = document.createElement('div');
-  labelEl.className = 'tile-label';
-  labelEl.textContent = label;
-
-  const valueEl = document.createElement('div');
-  valueEl.className = 'tile-value';
-  valueEl.textContent = value;
-  if (unit) {
-    const unitEl = document.createElement('span');
-    unitEl.className = 'tile-unit';
-    unitEl.textContent = unit;
-    valueEl.appendChild(unitEl);
-  }
-
-  const subEl = document.createElement('div');
-  subEl.className = 'tile-sub';
-  subEl.textContent = sub;
-
-  tile.append(labelEl, valueEl, subEl);
-  return tile;
-}
-
-function renderTiles(days) {
-  const latest = days[days.length - 1];
-  tilesEl.replaceChildren();
-
-  // 1. 最新 KH
-  const latestSub = latest.counted > 1
-    ? `${formatShortDate(latest.date)}，${latest.counted} 筆平均`
-    : formatShortDate(latest.date);
-  tilesEl.appendChild(createTile('最新 KH', formatKh(latest.kh), 'dKH', latestSub));
-
-  // 2. 距離目標
-  const gap = TARGET_KH - latest.kh;
-  const gapTile = gap > 0.005
-    ? createTile('距離目標還差', formatKh(gap), 'dKH', `目標 ${formatKh(TARGET_KH)} dKH`)
-    : createTile('距離目標', '已達標', '', `目標 ${formatKh(TARGET_KH)} dKH`);
-  tilesEl.appendChild(gapTile);
-
-  // 3. 近 7 天平均，並跟再往前的 7 天比較
-  const week = averageKh(days, latest.time, 7);
-  const previousWeek = averageKh(days, latest.time - 7 * 24 * 60 * 60 * 1000, 7);
-  const weekSub = previousWeek === null
-    ? '沒有前 7 天的資料可比較'
-    : `較前 7 天 ${formatDelta(week - previousWeek)}`;
-  tilesEl.appendChild(createTile('近 7 天平均', formatKh(week), 'dKH', weekSub));
-
-  // 4. 目前添加量
-  const dose = currentDose(days);
-  if (dose) {
-    tilesEl.appendChild(createTile('目前添加量', String(dose.dose), 'mL／天', `自 ${formatShortDate(dose.since)} 起`));
-  }
-}
-
-
-// ===== 消耗量與建議添加量 =====
-
-// 帶正負號、固定小數兩位：0.043 → "+0.04"
-function formatSigned(value) {
-  const text = Math.abs(value).toFixed(2);
-  if (Number(text) === 0) {
-    return '±0.00';
-  }
-  return (value > 0 ? '+' : '−') + text;
-}
-
-// 在結果清單加一列：項目名稱、數值、補充說明
-function addResult(term, value, note) {
-  const dt = document.createElement('dt');
-  dt.textContent = term;
-
-  const dd = document.createElement('dd');
-  const strong = document.createElement('strong');
-  strong.textContent = value;
-  dd.appendChild(strong);
-  if (note) {
-    const span = document.createElement('span');
-    span.textContent = note;
-    dd.appendChild(span);
-  }
-  analysisResult.append(dt, dd);
-}
-
-function showAnalysisMessage(text) {
-  analysisMessage.textContent = text;
-  analysisMessage.hidden = false;
-}
-
-function renderAnalysis(days) {
-  const perMl = khPerMl();
-  analysisResult.replaceChildren();
-  analysisMessage.hidden = true;
-
-  // 計算依據：把設定檔裡的數值列出來，方便核對
-  const basis = [
-    `系統水量 ${TANK_LITERS} L。`,
-    `${PRODUCT.name}：每 ${PRODUCT.labelLiters} L 添加 ${PRODUCT.labelMl} mL 原液，提高 ${PRODUCT.labelRise} dKH。`,
-    `稀釋比例：原液 ${DILUTION.stockMl} mL 加水至 ${DILUTION.totalMl} mL。`,
-    `換算後，1 mL 稀釋液約提高 ${perMl.toFixed(4)} dKH。`,
-    `滴定機於 ${CALIBRATION.date} 校準。校準前實際出水量為設定值的 ${CALIBRATION.factorLow * 100}% 至 ${CALIBRATION.factorHigh * 100}%，` +
-      `計算時以 ${CALIBRATION.factor * 100}% 換算，並把上下限算進估計範圍。`,
-  ];
-  analysisBasis.replaceChildren(...basis.map((text) => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    return li;
-  }));
-
-  const windowDays = Number(windowSelect.value);
-  const analyze = (factor) => analyzeConsumption(days, windowDays, perMl, CALIBRATION.date, factor);
-  const result = analyze(CALIBRATION.factor);
-  if (result === null) {
-    showAnalysisMessage(`最近 ${windowDays} 天的有效測量日不足 5 天，或沒有添加量紀錄，無法計算。請改選較長的區間。`);
-    return;
-  }
-
-  // 估計範圍：測量誤差造成的範圍，再加上校準前出水比例（上下限）的不確定性
-  let low = result.consumption - result.error;
-  let high = result.consumption + result.error;
-  if (result.corrected) {
-    low = Math.min(low, analyze(CALIBRATION.factorLow).consumption - result.error);
-    high = Math.max(high, analyze(CALIBRATION.factorHigh).consumption + result.error);
-  }
-  low = Math.max(0, low);
-
-  const range = `${formatShortDate(result.from)} 至 ${formatShortDate(result.to)}，${result.count} 個測量日`;
-  const supplyNote = result.corrected
-    ? `區間內平均實際添加 ${(result.supply / perMl).toFixed(1)} mL／天（校準前以設定值的 ${CALIBRATION.factor * 100}% 計）`
-    : `區間內平均添加 ${(result.supply / perMl).toFixed(1)} mL／天`;
-  addResult('每日補充量（理論）', `${result.supply.toFixed(2)} dKH／天`, supplyNote);
-  addResult('KH 平均變化', `${formatSigned(result.change)} dKH／天`, range);
-  addResult('每日淨消耗量', `${result.consumption.toFixed(2)} dKH／天`, `估計範圍 ${low.toFixed(2)} 至 ${high.toFixed(2)}`);
-
-  if (result.consumption <= 0) {
-    showAnalysisMessage('算出的消耗量不是正數，代表這段期間的資料無法反映實際消耗（例如測量誤差或換水影響過大），請改選其他區間。');
-    return;
-  }
-
-  // 持平：補充量剛好等於消耗量
-  const hold = result.consumption / perMl;
-  const holdLow = low / perMl;
-  const holdHigh = high / perMl;
-  addResult('維持 KH 不變所需添加量', `約 ${hold.toFixed(1)} mL／天`, `估計範圍 ${holdLow.toFixed(1)} 至 ${holdHigh.toFixed(1)} mL`);
-
-  // 到達目標：除了補足消耗，還要在指定天數內補上與目標的差距
-  const latest = days[days.length - 1];
-  const now = averageKh(days, latest.time, 7); // 用近 7 天平均當作目前的 KH，比單日讀值穩定
-  const gap = TARGET_KH - now;
-  const reachDays = Number(reachDaysInput.value);
-  if (gap <= 0.005) {
-    addResult(`到達目標 ${formatKh(TARGET_KH)}`, '已達標', `近 7 天平均 ${formatKh(now)} dKH，維持上面的添加量即可`);
-    return;
-  }
-  if (!Number.isInteger(reachDays) || reachDays < 3 || reachDays > 60) {
-    showAnalysisMessage('「預計幾天到達目標」請輸入 3 到 60 的整數。');
-    return;
-  }
-
-  const risePerDay = gap / reachDays;
-  const reach = (result.consumption + risePerDay) / perMl;
-  addResult(
-    `${reachDays} 天到達 ${formatKh(TARGET_KH)} 所需添加量`,
-    `約 ${reach.toFixed(1)} mL／天`,
-    `從近 7 天平均 ${formatKh(now)} 起算，每天上升 ${risePerDay.toFixed(2)} dKH；到達後改回維持量`,
-  );
-  if (risePerDay > 0.5) {
-    showAnalysisMessage('每天上升超過 0.5 dKH，變化偏快，建議拉長天數。');
-  }
-}
-
-
-// ===== 表格 =====
-
-function createCell(text, className) {
-  const td = document.createElement('td');
-  // 用 textContent 而不是 innerHTML：內容只會被當成純文字，不會被當成 HTML 執行
-  td.textContent = text;
-  if (className) {
-    td.classList.add(className);
-  }
-  return td;
-}
-
-function createButton(text, label, onClick) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'small';
-  button.textContent = text;
-  button.setAttribute('aria-label', label); // 給螢幕閱讀器的完整說明
-  button.addEventListener('click', onClick);
-  return button;
-}
-
-function renderTable() {
-  tbody.replaceChildren();
-
-  // 最新的排在最上面。slice() 先複製一份再反轉，不會改到原本的陣列
-  records.slice().reverse().forEach((record) => {
-    const tr = document.createElement('tr');
-
-    // 狀態欄可能同時有好幾個標記，先收集到陣列再用頓號接起來
-    const states = [];
-    if (isStandard(record)) {
-      states.push('標準液');
-    } else if (!isCounted(record)) {
-      states.push('已排除');
-    }
-    if (states.length > 0) {
-      tr.classList.add('not-counted');
-    }
-    const kind = origin.get(record).kind;
-    if (kind === 'added') {
-      states.push('新增，尚未寫入檔案');
-    } else if (kind === 'replaced') {
-      states.push('已修改，尚未寫入檔案');
-    }
-    if (record === editing) {
-      tr.classList.add('editing');
-    }
-
-    tr.appendChild(createCell(record.date));
-    tr.appendChild(createCell(record.time));
-    tr.appendChild(createCell(record.kh.toFixed(1), 'num'));
-    tr.appendChild(createCell(record.dose_ml ?? '', 'num'));
-    tr.appendChild(createCell(states.join('、')));
-    tr.appendChild(createCell(record.note));
-
-    const name = `${record.date} KH ${record.kh.toFixed(1)}`;
-    const actions = document.createElement('td');
-    actions.appendChild(createButton('編輯', `編輯 ${name} 的紀錄`, () => startEdit(record)));
-    actions.appendChild(createButton('刪除', `刪除 ${name} 的紀錄`, () => deleteRecord(record)));
-    tr.appendChild(actions);
-
-    tbody.appendChild(tr);
-  });
-}
+let rangeDays = DEFAULT_RANGE; // 圖表顯示最近幾天；0 代表全部
+let showAllRows = false;       // 表格是否顯示全部紀錄
+let syncing = false;           // 是否正在同步
 
 
 // ===== 重新整理整個畫面 =====
 
-// 資料有任何變動（載入完成、新增、修改、刪除）都呼叫這個函式
+// 資料有任何變動（載入完成、新增、修改、刪除、同步）都呼叫這個函式
 function refresh() {
-  records = buildRecords();
-  const days = buildDays(records);
+  ({ records, origin } = applyChanges(fileRecords, changes));
+  days = buildDays(records);
 
-  renderTable();
-  renderExportInfo();
+  // 正在編輯的紀錄如果已經不存在（例如同步後資料更新了），就回到新增模式
+  if (editing !== null && !origin.has(editing)) {
+    resetForm();
+  }
 
-  if (days.length === 0) {
+  renderRecordsTable();
+  renderSaveArea();
+  statusEl.classList.remove('error');
+
+  // 沒有任何有效讀值時，把統計、圖表、分析都藏起來
+  const latest = latestKhDay(days);
+  document.body.classList.toggle('no-data', latest === null);
+  if (latest === null) {
     statusEl.textContent = '目前沒有可用的 KH 紀錄';
     return;
   }
 
-  renderTiles(days);
-  renderAnalysis(days);
+  renderTiles(tilesEl, days);
+  renderWindowOptions();
+  renderAnalysisSection();
+  renderMethods($('#methods-result'), records);
+
   if (charts === null) {
     charts = renderCharts({
-      khBox: document.querySelector('#kh-chart'),
-      doseBox: document.querySelector('#dose-chart'),
-      area: document.querySelector('#chart-area'),
-      tooltip: document.querySelector('#tooltip'),
-      days,
-      records,
+      khBox: $('#kh-chart'),
+      doseBox: $('#dose-chart'),
+      area: $('#chart-area'),
+      tooltip: $('#tooltip'),
+      legend: $('#legend'),
       target: TARGET_KH,
     });
-  } else {
-    charts.update(days, records);
   }
+  charts.update(days, rangeDays);
 
+  const measuredDays = days.filter((day) => day.kh !== null).length;
   const notCounted = records.filter((record) => !isCounted(record)).length;
   statusEl.textContent =
-    `${days[0].date} 至 ${days[days.length - 1].date}，共 ${days.length} 個測量日、${records.length} 筆讀值` +
+    `${days[0].date} 至 ${days[days.length - 1].date}，共 ${measuredDays} 個測量日、${records.length} 筆讀值` +
     `（其中 ${notCounted} 筆不納入統計）`;
 }
 
-function renderExportInfo() {
-  const count = changeCount();
+function renderRecordsTable() {
+  renderTable(tbody, records, {
+    origin,
+    editing,
+    limit: showAllRows ? 0 : TABLE_LIMIT,
+    onEdit: startEdit,
+    onDelete: deleteRecord,
+  });
+  showAllButton.hidden = showAllRows || records.length <= TABLE_LIMIT;
+  showAllButton.textContent = `顯示全部 ${records.length} 筆`;
+}
+
+// 「計算區間」選單：選項會隨資料改變（例如新增了事件），重建時保留原本選的項目
+function renderWindowOptions() {
+  const selected = windowSelect.value || '14';
+  const options = windowOptions(days);
+  windowSelect.replaceChildren(...options.map((option) => {
+    const element = document.createElement('option');
+    element.value = option.value;
+    element.textContent = option.label;
+    return element;
+  }));
+  windowSelect.value = options.some((option) => option.value === selected) ? selected : '14';
+}
+
+function renderAnalysisSection() {
+  renderAnalysis(
+    { result: $('#analysis-result'), message: $('#analysis-message'), basis: $('#analysis-basis') },
+    days,
+    { windowValue: windowSelect.value, reachDays: Number(reachDaysInput.value) },
+  );
+}
+
+// 表單下方的儲存狀態：還有幾項變更沒儲存，以及要顯示哪些按鈕
+function renderSaveArea() {
+  const count = countChanges(changes);
+  const hasToken = getToken() !== '';
+
   discardButton.hidden = count === 0;
+  syncButton.hidden = !hasToken;
+  syncButton.disabled = syncing || count === 0;
 
   if (count === 0) {
-    exportInfo.textContent = '所有紀錄都已寫入 data/kh-records.json。';
-    return;
+    exportInfo.textContent = source === 'github'
+      ? '所有紀錄都已同步到 GitHub。'
+      : '所有紀錄都已寫入 data/kh-records.json。';
+  } else if (hasToken) {
+    exportInfo.textContent = `有 ${count} 項變更尚未同步到 GitHub（${describeChanges(changes)}）。`;
+  } else {
+    exportInfo.textContent =
+      `有 ${count} 項變更只存在這個瀏覽器（${describeChanges(changes)}），尚未寫入 data/kh-records.json。`;
   }
-  const parts = [];
-  if (changes.added.length > 0) {
-    parts.push(`新增 ${changes.added.length} 筆`);
-  }
-  if (changes.replaced.length > 0) {
-    parts.push(`修改 ${changes.replaced.length} 筆`);
-  }
-  if (changes.removed.length > 0) {
-    parts.push(`刪除 ${changes.removed.length} 筆`);
-  }
-  exportInfo.textContent =
-    `有 ${count} 項變更只存在這個瀏覽器（${parts.join('、')}），尚未寫入 data/kh-records.json。`;
 }
 
 // 存檔並重畫；回傳是否成功存入瀏覽器
@@ -413,7 +165,7 @@ function saveAndRefresh() {
 
 // ===== 表單 =====
 
-// 今天的日期，格式 'YYYY-MM-DD'（用電腦的當地時間）
+// 今天的日期，格式 'YYYY-MM-DD'（用裝置的當地時間）
 function todayText() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -421,22 +173,54 @@ function todayText() {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-function showFormMessage(text, isError) {
-  formMessage.textContent = text;
-  formMessage.classList.toggle('error', isError);
+function showMessage(element, text, isError) {
+  element.textContent = text;
+  element.classList.toggle('error', isError === true);
 }
 
-// 回到「新增」模式：清空表單，預設今天的日期與目前的添加量
+// 依照目前的選擇，停用不適用的欄位：
+// 標準液不是魚缸水，沒有添加量、換水、排除；沒填換水量時，不需要選換水前後
+function updateFormState() {
+  const fields = form.elements;
+  const isTank = fields.type.value === 'tank';
+  fields.dose_ml.disabled = !isTank;
+  fields.water_change_l.disabled = !isTank;
+  fields.exclude.disabled = !isTank;
+  fields.water_change_timing.disabled = !isTank || fields.water_change_l.value === '';
+}
+
+// 新紀錄預設的測試方式：最近 10 筆有標示的紀錄中最常用的那一種
+function defaultMethod() {
+  const counts = {};
+  records.filter((record) => record.method).slice(-10).forEach((record) => {
+    counts[record.method] = (counts[record.method] ?? 0) + 1;
+  });
+
+  let best = '';
+  Object.keys(counts).forEach((method) => {
+    if (best === '' || counts[method] > counts[best]) {
+      best = method;
+    }
+  });
+  return best;
+}
+
+// 回到「新增」模式：清空表單，預設今天的日期、目前的添加量、最近常用的測試方式
 function resetForm() {
   editing = null;
   form.reset();
-  form.elements.date.value = todayText();
-  const dose = currentDose(buildDays(records));
-  form.elements.dose_ml.value = dose ? dose.dose : '';
+  const fields = form.elements;
+  fields.date.value = todayText();
+
+  const dose = currentDose(days);
+  fields.dose_ml.value = dose ? dose.dose : '';
+
+  fields.method.value = defaultMethod();
 
   formTitle.textContent = '新增紀錄';
   submitButton.textContent = '新增';
   cancelButton.hidden = true;
+  updateFormState();
 }
 
 // 進入「編輯」模式：把這筆紀錄的內容填進表單
@@ -448,14 +232,19 @@ function startEdit(record) {
   fields.kh.value = record.kh;
   fields.dose_ml.value = record.dose_ml ?? '';
   fields.type.value = record.type ?? 'tank';
+  fields.method.value = record.method ?? '';
+  fields.water_change_l.value = record.water_change_l ?? '';
+  fields.water_change_timing.value = record.water_change_l > 0 ? (record.water_change_timing ?? '') : 'after';
+  fields.event.value = record.event ?? '';
   fields.exclude.checked = record.exclude === true;
   fields.note.value = record.note ?? '';
 
   formTitle.textContent = `編輯紀錄（${record.date} KH ${record.kh.toFixed(1)}）`;
   submitButton.textContent = '儲存修改';
   cancelButton.hidden = false;
-  showFormMessage('', false);
-  renderTable(); // 重畫表格，標示正在編輯的那一列
+  showMessage(formMessage, '');
+  updateFormState();
+  renderRecordsTable(); // 重畫表格，標示正在編輯的那一列
 
   form.scrollIntoView({ behavior: 'smooth', block: 'center' });
   fields.kh.focus({ preventScroll: true });
@@ -463,45 +252,61 @@ function startEdit(record) {
 
 function cancelEdit() {
   resetForm();
-  renderTable();
-  showFormMessage('已取消編輯。', false);
+  renderRecordsTable();
+  showMessage(formMessage, '已取消編輯。');
 }
 
 // 把表單欄位的內容組成一筆紀錄
 function readForm() {
   // 從表單欄位讀出的值都是字串，數字要自己用 Number() 轉換
   const fields = form.elements;
-  const type = fields.type.value;
+  const isTank = fields.type.value === 'tank';
+  const liters = isTank && fields.water_change_l.value !== '' ? Number(fields.water_change_l.value) : 0;
+
   return {
     date: fields.date.value,
     time: fields.time.value,
     kh: Number(fields.kh.value),
-    // 標準液不是魚缸水，添加量與排除標記對它沒有意義
-    dose_ml: type === 'tank' && fields.dose_ml.value !== '' ? Number(fields.dose_ml.value) : null,
-    type,
-    exclude: type === 'tank' && fields.exclude.checked,
+    dose_ml: isTank && fields.dose_ml.value !== '' ? Number(fields.dose_ml.value) : null,
+    type: fields.type.value,
+    method: fields.method.value,
+    exclude: isTank && fields.exclude.checked,
+    water_change_l: liters > 0 ? liters : null,
+    water_change_timing: liters > 0 ? fields.water_change_timing.value : '',
+    event: fields.event.value.trim(),
     note: fields.note.value.trim(),
   };
+}
+
+// 同步進行中不接受新的變更，避免同步完成時對不上。回傳 true 代表現在要先等一下
+function blockedBySync() {
+  if (syncing) {
+    showMessage(formMessage, '同步中，請稍候再操作。', true);
+  }
+  return syncing;
 }
 
 function handleSubmit(event) {
   // 表單預設會重新載入頁面，這裡攔下來改由 JS 處理
   event.preventDefault();
+  if (blockedBySync()) {
+    return;
+  }
   const record = readForm();
 
   // 必填、數值範圍已由 HTML 的 required、min、max 檢查，這裡補上其餘的檢查
   if (record.date > todayText()) {
-    showFormMessage('日期不能是未來的日期。', true);
+    showMessage(formMessage, '日期不能是未來的日期。', true);
     return;
   }
   if (editing && isSameRecord(editing, record)) {
     resetForm();
-    renderTable();
-    showFormMessage('內容沒有變更。', false);
+    renderRecordsTable();
+    showMessage(formMessage, '內容沒有變更。');
     return;
   }
   if (records.some((existing) => existing !== editing && isSameRecord(existing, record))) {
-    showFormMessage('已經有一筆內容完全相同的紀錄。', true);
+    showMessage(formMessage, '已經有一筆內容完全相同的紀錄。', true);
     return;
   }
 
@@ -514,16 +319,17 @@ function handleSubmit(event) {
 
   const saved = saveAndRefresh();
   resetForm();
-  renderTable();
+  renderRecordsTable();
   if (!wasEditing) {
     form.elements.kh.focus();
   }
 
   const name = `${formatShortDate(record.date)} 的紀錄（KH ${record.kh.toFixed(1)}）`;
-  if (saved) {
-    showFormMessage(wasEditing ? `已修改 ${name}。` : `已新增 ${name}。`, false);
+  if (!saved) {
+    showMessage(formMessage, '已套用，但瀏覽器無法儲存，重新整理後會消失，請立即同步或匯出 JSON。', true);
   } else {
-    showFormMessage('已套用，但瀏覽器無法儲存，重新整理後會消失，請立即匯出 JSON。', true);
+    const reminder = getToken() !== '' ? '記得按「同步到 GitHub」。' : '';
+    showMessage(formMessage, `${wasEditing ? '已修改' : '已新增'} ${name}。${reminder}`);
   }
 }
 
@@ -532,87 +338,277 @@ function handleSubmit(event) {
 
 // 依紀錄的來源，把修改記到對應的變更清單
 function applyEdit(record, updated) {
-  const source = origin.get(record);
+  const from = origin.get(record);
 
-  if (source.kind === 'added') {
-    // 還沒寫入檔案的新增紀錄：直接換成新內容
+  if (from.kind === 'added') {
+    // 還沒儲存的新增紀錄：直接換成新內容
     changes.added[changes.added.indexOf(record)] = updated;
-  } else if (source.kind === 'replaced') {
-    // 之前改過的：更新修改後的內容；如果改回跟檔案一樣，就等於沒改
-    if (isSameRecord(source.entry.from, updated)) {
-      changes.replaced = changes.replaced.filter((entry) => entry !== source.entry);
+  } else if (from.kind === 'replaced') {
+    // 之前改過的：更新修改後的內容；如果改回跟資料檔一樣，就等於沒改
+    if (isSameRecord(from.entry.from, updated)) {
+      changes.replaced = changes.replaced.filter((entry) => entry !== from.entry);
     } else {
-      source.entry.to = updated;
+      from.entry.to = updated;
     }
   } else {
-    // 檔案裡的紀錄：記下「從哪一筆改成什麼」
+    // 資料檔裡的紀錄：記下「從哪一筆改成什麼」
     changes.replaced.push({ from: record, to: updated });
   }
 }
 
 function deleteRecord(record) {
+  if (blockedBySync()) {
+    return;
+  }
   if (!confirm(`確定要刪除 ${record.date} KH ${record.kh.toFixed(1)} 這筆紀錄嗎？`)) {
     return;
   }
-  const source = origin.get(record);
+  const from = origin.get(record);
 
-  if (source.kind === 'added') {
+  if (from.kind === 'added') {
     // filter：留下「不是這一筆」的紀錄，等於把它刪掉
     changes.added = changes.added.filter((item) => item !== record);
-  } else if (source.kind === 'replaced') {
-    // 改過又刪除：取消修改，並把檔案裡原本那筆記為刪除
-    changes.replaced = changes.replaced.filter((entry) => entry !== source.entry);
-    changes.removed.push(source.entry.from);
+  } else if (from.kind === 'replaced') {
+    // 改過又刪除：取消修改，並把資料檔裡原本那筆記為刪除
+    changes.replaced = changes.replaced.filter((entry) => entry !== from.entry);
+    changes.removed.push(from.entry.from);
   } else {
     changes.removed.push(record);
   }
 
-  const wasEditingThis = editing === record;
   saveAndRefresh();
-  if (wasEditingThis) {
-    resetForm();
-  }
-  showFormMessage('已刪除。寫入檔案前，可用「捨棄未寫入的變更」復原。', false);
+  showMessage(formMessage, '已刪除。儲存前可用「捨棄未儲存的變更」復原。');
 }
 
 function handleDiscard() {
-  if (!confirm(`確定要捨棄 ${changeCount()} 項尚未寫入檔案的變更嗎？畫面會回到檔案裡的內容。`)) {
+  if (blockedBySync()) {
+    return;
+  }
+  if (!confirm(`確定要捨棄 ${countChanges(changes)} 項尚未儲存的變更嗎？畫面會回到資料檔裡的內容。`)) {
     return;
   }
   changes = emptyChanges();
   saveAndRefresh();
   resetForm();
-  renderTable();
-  showFormMessage('已捨棄所有未寫入的變更。', false);
+  renderRecordsTable();
+  showMessage(formMessage, '已捨棄所有未儲存的變更。');
 }
 
-function handleExport() {
+
+// ===== GitHub 同步 =====
+
+function renderTokenState() {
+  const hasToken = getToken() !== '';
+  tokenState.textContent = hasToken
+    ? '已設定權杖，這個瀏覽器可以直接讀寫 GitHub 上的資料。'
+    : '尚未設定權杖。';
+  tokenRemoveButton.hidden = !hasToken;
+}
+
+// 「儲存並測試」：先用權杖讀一次資料檔，成功才存起來
+async function handleTokenSave() {
+  const token = tokenInput.value.trim();
+  if (token === '') {
+    showMessage(tokenMessage, '請先貼上權杖。', true);
+    return;
+  }
+
+  tokenSaveButton.disabled = true;
+  showMessage(tokenMessage, '測試連線中…');
+  try {
+    await fetchRemoteRecords(token);
+    if (!saveToken(token)) {
+      throw new Error('瀏覽器無法儲存權杖（可能是無痕模式）。');
+    }
+    tokenInput.value = '';
+    renderTokenState();
+    await loadData();
+    showMessage(tokenMessage, '連線成功，權杖已儲存在這個瀏覽器。寫入權限會在第一次同步時確認。');
+  } catch (error) {
+    showMessage(tokenMessage, `設定失敗：${error.message}`, true);
+  } finally {
+    tokenSaveButton.disabled = false;
+  }
+}
+
+async function handleTokenRemove() {
+  if (!confirm('確定要移除這個瀏覽器裡的權杖嗎？移除後無法直接同步到 GitHub。')) {
+    return;
+  }
+  removeToken();
+  renderTokenState();
+  showMessage(tokenMessage, '已移除權杖。');
+  try {
+    await loadData();
+  } catch (error) {
+    showLoadError(error);
+  }
+}
+
+// 把尚未儲存的變更提交到 GitHub
+async function handleSync() {
+  const token = getToken();
+  if (token === '' || syncing) {
+    return;
+  }
+
+  syncing = true;
+  renderSaveArea();
+  showMessage(syncMessage, '同步中…');
+  try {
+    // 最多試 3 次：如果讀取之後、寫入之前，剛好有其他裝置改了檔案（409），就重新讀取再套用一次
+    for (let attempt = 1; ; attempt++) {
+      const remote = await fetchRemoteRecords(token);
+      upgradeChanges(remote.records, changes);
+      const merged = applyChanges(remote.records, changes).records;
+      const text = toJsonText(merged);
+
+      try {
+        // 內容跟 GitHub 上的一樣時（例如另一台裝置已經同步過），不需要再提交
+        if (text !== toJsonText(remote.records)) {
+          await pushRemoteRecords(token, text, remote.sha, `更新 KH 紀錄（${describeChanges(changes)}）`);
+        }
+      } catch (error) {
+        if (error.status === 409 && attempt < 3) {
+          continue;
+        }
+        throw error;
+      }
+
+      fileRecords = merged;
+      source = 'github';
+      break;
+    }
+
+    // 已經寫進資料檔的變更從暫存移除；同步期間新增的變更會留著
+    cleanChanges(fileRecords, changes);
+    saveChanges(changes);
+    const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    showMessage(syncMessage, `已同步到 GitHub（${time}）。`);
+  } catch (error) {
+    showMessage(syncMessage, `同步失敗：${error.message}變更仍保留在這個瀏覽器。`, true);
+  } finally {
+    syncing = false;
+    refresh();
+  }
+}
+
+
+// ===== 匯出與圖表範圍 =====
+
+function handleExportJson() {
   downloadText('kh-records.json', toJsonText(records));
 }
 
+function handleExportCsv() {
+  downloadText('kh-records.csv', toCsvText(records), 'text/csv');
+}
 
-// ===== 主流程 =====
+// 讀出上次選的範圍；沒有紀錄，或不是畫面上有的選項，就用預設值
+function readStoredRange() {
+  let stored = null;
+  try {
+    stored = localStorage.getItem(RANGE_KEY);
+  } catch (error) {
+    // 無法讀取時用預設值
+  }
+  const available = [...rangeButtons].map((button) => Number(button.dataset.range));
+  return stored !== null && available.includes(Number(stored)) ? Number(stored) : DEFAULT_RANGE;
+}
+
+function setRange(value) {
+  rangeDays = value;
+  try {
+    localStorage.setItem(RANGE_KEY, String(value));
+  } catch (error) {
+    // 存不了也沒關係，只是下次要重新選
+  }
+  // aria-pressed：告訴螢幕閱讀器哪一個按鈕目前被選取
+  rangeButtons.forEach((button) => {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.range) === rangeDays));
+  });
+  if (charts !== null) {
+    charts.update(days, rangeDays);
+  }
+}
+
+
+// ===== 載入資料 =====
+
+// 有設定權杖時，優先讀 GitHub 上的最新版本；讀不到或沒有權杖，就讀網站上的資料檔
+async function loadData() {
+  const token = getToken();
+  let warning = '';
+  let loaded = false;
+
+  if (token !== '') {
+    try {
+      fileRecords = (await fetchRemoteRecords(token)).records;
+      source = 'github';
+      loaded = true;
+    } catch (error) {
+      warning = `無法從 GitHub 讀取最新資料（${error.message}）目前顯示的是網站上的資料檔，可能不是最新的。`;
+    }
+  }
+  if (!loaded) {
+    fileRecords = await loadRecords();
+    source = 'file';
+  }
+
+  // 整理暫存的變更：先把舊版格式對應到現在的欄位，再移除已經寫進資料檔的項目
+  const upgraded = upgradeChanges(fileRecords, changes);
+  const cleaned = cleanChanges(fileRecords, changes);
+  if (upgraded || cleaned) {
+    saveChanges(changes);
+  }
+
+  refresh();
+  resetForm();
+  showMessage(syncMessage, warning, warning !== '');
+}
+
+function showLoadError(error) {
+  // 讀檔失敗、JSON 格式錯誤、欄位缺漏，都會跑到這裡
+  console.error(error);
+  fileRecords = [];
+  refresh();
+  statusEl.textContent = `資料載入失敗：${error.message}`;
+  statusEl.classList.add('error');
+}
 
 async function init() {
-  try {
-    fileRecords = await loadRecords();
-    changes = loadChanges();
-    cleanChanges();
+  changes = loadChanges();
+  form.elements.water_change_l.max = TANK_LITERS;
 
-    refresh();
-    resetForm();
-    form.addEventListener('submit', handleSubmit);
-    cancelButton.addEventListener('click', cancelEdit);
-    exportButton.addEventListener('click', handleExport);
-    discardButton.addEventListener('click', handleDiscard);
-    // 改變計算區間或天數時，只需要重算分析的部分
-    windowSelect.addEventListener('change', () => renderAnalysis(buildDays(records)));
-    reachDaysInput.addEventListener('input', () => renderAnalysis(buildDays(records)));
+  // 先綁定所有按鈕與欄位的事件。就算資料載入失敗，設定權杖等功能還是要能用
+  form.addEventListener('submit', handleSubmit);
+  form.elements.type.addEventListener('change', updateFormState);
+  form.elements.water_change_l.addEventListener('input', updateFormState);
+  cancelButton.addEventListener('click', cancelEdit);
+  discardButton.addEventListener('click', handleDiscard);
+  syncButton.addEventListener('click', handleSync);
+  tokenSaveButton.addEventListener('click', handleTokenSave);
+  tokenRemoveButton.addEventListener('click', handleTokenRemove);
+  $('#export-button').addEventListener('click', handleExportJson);
+  $('#csv-button').addEventListener('click', handleExportCsv);
+  showAllButton.addEventListener('click', () => {
+    showAllRows = true;
+    renderRecordsTable();
+  });
+  rangeButtons.forEach((button) => {
+    button.addEventListener('click', () => setRange(Number(button.dataset.range)));
+  });
+  // 改變計算區間或天數時，只需要重算分析的部分
+  windowSelect.addEventListener('change', renderAnalysisSection);
+  reachDaysInput.addEventListener('input', renderAnalysisSection);
+
+  setRange(readStoredRange());
+  renderTokenState();
+
+  try {
+    await loadData();
   } catch (error) {
-    // 讀檔失敗、JSON 格式錯誤、欄位缺漏，都會跑到這裡
-    console.error(error);
-    statusEl.textContent = `資料載入失敗：${error.message}`;
-    statusEl.classList.add('error');
+    showLoadError(error);
   }
 }
 

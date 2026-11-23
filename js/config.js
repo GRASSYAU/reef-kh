@@ -29,6 +29,18 @@ export const CALIBRATION = {
   factorHigh: 0.9,
 };
 
+// 換水用的新海水 KH（dKH）。實際量過就填數字，例如 8.5；
+// 填 null 代表沒量過，程式會用歷次換水前後的讀值推算（誤差較大）
+export const NEW_SALTWATER_KH = null;
+
+// GitHub 同步：資料檔所在的存放庫、分支與路徑
+export const GITHUB = {
+  owner: 'GRASSYAU',
+  repo: 'reef-kh',
+  branch: 'main',
+  path: 'data/kh-records.json',
+};
+
 // 1 mL「稀釋液」加進這個缸子，理論上讓 KH 提高多少 dKH
 export function khPerMl() {
   const perMlStockIn100L = PRODUCT.labelRise / PRODUCT.labelMl;           // 1 mL 原液在標示水量中的效果

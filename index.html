@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>珊瑚缸 KH 紀錄</title>
+  <!-- noindex：請搜尋引擎不要收錄這個頁面 -->
+  <meta name="robots" content="noindex">
+
+  <!-- 手機「加入主畫面」時使用的名稱、圖示與顏色 -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="KH 紀錄">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+
   <link rel="stylesheet" href="css/style.css">
   <!-- type="module"：讓 app.js 可以用 import 載入其他 JS 檔，而且會等 HTML 解析完才執行 -->
   <script type="module" src="js/app.js"></script>
@@ -16,8 +28,8 @@
   </header>
 
   <main>
-    <!-- 統計卡片，內容由 app.js 產生 -->
-    <section id="tiles" class="tiles" aria-label="統計摘要"></section>
+    <!-- 統計卡片，內容由 app.js 產生。data-needs-data：沒有資料時整塊隱藏 -->
+    <section id="tiles" class="tiles" aria-label="統計摘要" data-needs-data></section>
 
     <section class="card">
       <h2 id="form-title">新增紀錄</h2>
@@ -31,17 +43,38 @@
         <label>KH (dKH)
           <input type="number" name="kh" step="0.1" min="0.1" max="20" inputmode="decimal" required>
         </label>
-        <label>添加量 (mL／天，可不填)
+        <label>添加量 (mL／天)
           <input type="number" name="dose_ml" step="0.1" min="0" inputmode="decimal">
         </label>
-        <label>水樣
+        <label class="span-2">測試方式
+          <select name="method">
+            <option value="">未標示</option>
+            <option value="hanna">Hanna</option>
+            <option value="salifert">Salifert</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
+        <label class="span-2">水樣
           <select name="type">
             <option value="tank">魚缸水（一般測量）</option>
             <option value="standard">標準液（儀器驗證）</option>
           </select>
         </label>
+        <label>當天換水量 (L)
+          <input type="number" name="water_change_l" step="0.5" min="0" inputmode="decimal" placeholder="沒換水就留空">
+        </label>
+        <label>這筆讀值是在
+          <select name="water_change_timing">
+            <option value="after">換水後測的</option>
+            <option value="before">換水前測的</option>
+            <option value="">未註明</option>
+          </select>
+        </label>
         <label class="wide">備註
-          <input type="text" name="note" maxlength="100" placeholder="例如：換水 10 L 後、Hanna 重測">
+          <input type="text" name="note" maxlength="100" placeholder="例如：重測、取水位置不同">
+        </label>
+        <label class="wide">事件（會在圖上畫出分隔線）
+          <input type="text" name="event" maxlength="20" placeholder="例如：滴定機校準、換稀釋比例">
         </label>
         <label class="check wide">
           <input type="checkbox" name="exclude">
@@ -51,37 +84,76 @@
           <button type="submit" id="submit-button" class="primary">新增</button>
           <button type="button" id="cancel-button" hidden>取消</button>
           <!-- role="status"：內容更新時，螢幕閱讀器會唸出來 -->
-          <span id="form-message" class="form-message" role="status"></span>
+          <span id="form-message" class="message" role="status"></span>
         </div>
       </form>
 
-      <div class="export">
+      <div class="save-area">
         <p id="export-info"></p>
-        <button id="discard-button" type="button" hidden>捨棄未寫入的變更</button>
-        <button id="export-button" type="button">匯出 JSON</button>
+        <div class="button-row">
+          <button id="sync-button" type="button" class="primary" hidden>同步到 GitHub</button>
+          <button id="export-button" type="button">匯出 JSON</button>
+          <button id="csv-button" type="button">匯出 CSV</button>
+          <button id="discard-button" type="button" hidden>捨棄未儲存的變更</button>
+        </div>
+        <p id="sync-message" class="message" role="status"></p>
+
         <details>
-          <summary>如何把變更寫回專案</summary>
+          <summary>GitHub 同步設定（手機使用時需要）</summary>
+          <p>設定權杖（token，一組代表你身分的密碼）之後，按「同步到 GitHub」就能把變更直接存進存放庫，不需要匯出檔案，手機也能用。</p>
+          <p id="token-state" class="hint"></p>
+          <div class="token-row">
+            <label>權杖
+              <input type="password" id="token-input" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+            </label>
+            <button id="token-save-button" type="button">儲存並測試</button>
+            <button id="token-remove-button" type="button" hidden>移除權杖</button>
+          </div>
+          <p id="token-message" class="message" role="status"></p>
+          <p class="hint">如何產生權杖（在 GitHub 網站上操作，介面是英文）：</p>
+          <ol>
+            <li>點右上角的大頭貼，選「Settings」（設定）。</li>
+            <li>左側選單最下方選「Developer settings」（開發人員設定）。</li>
+            <li>選「Personal access tokens」（個人存取權杖）→「Fine-grained tokens」（細部權限權杖）→「Generate new token」（產生新權杖）。</li>
+            <li>「Repository access」（可存取的存放庫）選「Only select repositories」，只勾選 reef-kh。</li>
+            <li>「Permissions」（權限）裡的「Contents」（內容）設為「Read and write」（讀取與寫入）。</li>
+            <li>按「Generate token」，複製 github_pat_ 開頭的那串文字，貼到上面的欄位。</li>
+          </ol>
+          <ul>
+            <li>權杖只存在這台裝置的瀏覽器，不會寫進專案，也只會傳給 GitHub。每台裝置要各設定一次。</li>
+            <li>這個權杖可以修改 reef-kh 存放庫的內容，請不要提供給別人。裝置遺失或不再使用時，到同一個頁面把它刪除。</li>
+            <li>權杖到期後同步會失敗，重新產生一個再貼上即可。</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>不用 GitHub 同步時，如何把變更寫回專案</summary>
           <ol>
             <li>按「匯出 JSON」，下載 <code>kh-records.json</code>。</li>
             <li>用下載的檔案取代專案裡的 <code>data/kh-records.json</code>。</li>
             <li>在 VS Code 的「原始檔控制」提交並同步。</li>
-            <li>重新整理這個頁面，已寫入檔案的變更會自動從瀏覽器暫存中移除。</li>
+            <li>重新整理這個頁面，已寫入資料檔的變更會自動從瀏覽器暫存中移除。</li>
           </ol>
         </details>
       </div>
     </section>
 
-    <section class="card">
-      <h2>KH 趨勢 (dKH)</h2>
-      <ul class="legend">
-        <li><span class="key key-line"></span>每日 KH（有效讀值平均）</li>
-        <li><span class="key key-cross">×</span>已排除讀值</li>
-      </ul>
+    <section class="card" data-needs-data>
+      <div class="card-head">
+        <h2>KH 趨勢 (dKH)</h2>
+        <div class="range-buttons" role="group" aria-label="圖表時間範圍">
+          <button type="button" data-range="30">30 天</button>
+          <button type="button" data-range="90">90 天</button>
+          <button type="button" data-range="0">全部</button>
+        </div>
+      </div>
+      <!-- 圖例，內容由 chart.js 依畫面上實際出現的項目產生 -->
+      <ul id="legend" class="legend"></ul>
 
       <!-- 兩張圖共用同一個時間軸與提示框 -->
       <div id="chart-area" class="chart-area">
         <div id="kh-chart" class="chart" tabindex="0" role="img"
-             aria-label="每日 KH 折線圖，可用左右方向鍵逐日查看，完整數值請見下方表格"></div>
+             aria-label="KH 趨勢圖，可用左右方向鍵逐日查看，完整數值請見下方表格"></div>
         <h3>每日添加量 (mL)</h3>
         <div id="dose-chart" class="chart" role="img"
              aria-label="每日添加量階梯圖，完整數值請見下方表格"></div>
@@ -89,15 +161,11 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" data-needs-data>
       <h2>消耗量與建議添加量</h2>
       <div class="analysis-controls">
         <label>計算區間
-          <select id="window-select">
-            <option value="7">最近 7 天</option>
-            <option value="14" selected>最近 14 天</option>
-            <option value="30">最近 30 天</option>
-          </select>
+          <select id="window-select"></select>
         </label>
         <label>預計幾天到達目標
           <input type="number" id="reach-days" value="14" min="3" max="60" step="1" inputmode="numeric">
@@ -105,17 +173,16 @@
       </div>
 
       <!-- 計算結果由 app.js 填入 -->
-      <p id="analysis-message" class="analysis-message" hidden></p>
-      <dl id="analysis-result" class="analysis-result"></dl>
+      <p id="analysis-message" class="notice" hidden></p>
+      <div id="analysis-result"></div>
 
       <details>
         <summary>計算依據與限制</summary>
         <ul id="analysis-basis"></ul>
         <ul>
           <li>添加劑的效果依產品標示換算，是理論值，實際效果可能有落差。</li>
-          <li>「淨消耗量」已包含例行換水帶來的補充，前提是之後維持相同的換水習慣。</li>
-          <li>單次測量有誤差，區間越短結果越不穩定；估計範圍越寬，代表越不可靠。</li>
           <li>建議添加量是校準後滴定機的實際毫升數，可以直接對應現在的設定值。</li>
+          <li>單次測量有誤差，區間越短結果越不穩定；估計範圍越寬，代表越不可靠。</li>
           <li>區間內如果換過稀釋比例或添加劑，或滴定機出水量再次偏移，實際添加量與紀錄不符，結果會失準。</li>
           <li>KH 升高後，珊瑚的消耗量可能跟著改變，到達目標後請重新觀察。</li>
           <li>這裡的數字是估算，調整添加量時建議小幅調整，並持續測量確認。</li>
@@ -123,17 +190,24 @@
       </details>
     </section>
 
+    <section class="card" data-needs-data>
+      <h2>測試方式比較</h2>
+      <div id="methods-result"></div>
+    </section>
+
     <section class="card">
       <h2>所有讀值</h2>
-      <!-- 外層包一個 div，手機螢幕太窄時表格可以左右捲動 -->
+      <!-- 外層包一個 div，表格太寬時可以左右捲動；手機上會改成一筆一塊的排法 -->
       <div class="table-wrap">
-        <table>
+        <table class="records-table">
           <thead>
             <tr>
               <th scope="col">日期</th>
               <th scope="col">時間</th>
-              <th scope="col" class="num">KH (dKH)</th>
+              <th scope="col" class="num">KH</th>
               <th scope="col" class="num">添加量 (mL)</th>
+              <th scope="col">測試</th>
+              <th scope="col">換水</th>
               <th scope="col">狀態</th>
               <th scope="col">備註</th>
               <th scope="col">操作</th>
@@ -143,6 +217,7 @@
           <tbody id="kh-body"></tbody>
         </table>
       </div>
+      <button id="show-all-button" type="button" class="show-all" hidden></button>
     </section>
   </main>
 </body>
