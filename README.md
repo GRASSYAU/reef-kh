@@ -50,6 +50,10 @@ reef-kh/
 └── data/kh-records.json  KH 紀錄（2026-08-25 起的實際測量值）
 ```
 
+## 字體
+
+使用各裝置內建的字體，不需要下載，離線也能用：iPhone 與 Mac 是蘋方（中文）搭配 San Francisco（英數字），Windows 是微軟正黑體。
+
 ## 在電腦上執行
 
 不能直接雙擊 `index.html`，瀏覽器會擋下讀取 JSON 的動作，必須透過本機伺服器開啟。
