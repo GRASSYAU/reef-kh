@@ -3,7 +3,7 @@
 
 import {
   DAY_MS, latestKhDay, averageKh, currentDose, isStandard, isCounted, methodLabel, waterChangeLiters,
-  formatKh, formatDelta, formatShortDate,
+  formatKh, formatDelta, formatShortDate, formatDateWithWeekday,
 } from './data.js';
 import {
   buildPoints, estimateNewWaterKh, waterChangeRate, analyzeConsumption, compareMethods,
@@ -89,6 +89,82 @@ export function renderTiles(container, days) {
   if (dose) {
     container.appendChild(createTile('目前添加量', String(dose.dose), 'mL／天', `自 ${formatShortDate(dose.since)} 起`));
   }
+}
+
+
+// ===== 手機「記錄」分頁最上方的摘要 =====
+
+// today：今天的日期（'YYYY-MM-DD'），用來顯示今天記錄了沒
+export function renderHero(container, days, today) {
+  const latest = latestKhDay(days);
+  container.replaceChildren();
+
+  // 左邊：最新的 KH，以及今天是否已經記錄
+  const main = el('div', 'hero-main');
+  main.appendChild(el('div', 'hero-label', `最新 KH · ${formatShortDate(latest.date)}`));
+  const value = el('div', 'hero-value', formatKh(latest.kh));
+  value.appendChild(el('span', 'hero-unit', 'dKH'));
+  main.appendChild(value);
+
+  const todayDay = days.find((day) => day.date === today);
+  main.appendChild(el(
+    'div',
+    'hero-today',
+    todayDay ? `✓ 今天已記錄 ${todayDay.records.length} 筆` : '今天還沒記錄',
+  ));
+
+  // 右邊：三個小數字
+  const side = el('dl', 'hero-side');
+  const addStat = (term, text) => {
+    side.append(el('dt', '', term), el('dd', '', text));
+  };
+  const gap = TARGET_KH - latest.kh;
+  addStat(`目標 ${formatKh(TARGET_KH)}`, gap > 0.005 ? `還差 ${formatKh(gap)}` : '已達標');
+  addStat('近 7 天平均', formatKh(averageKh(days, latest.time, 7)));
+  const dose = currentDose(days);
+  if (dose) {
+    addStat('添加量', `${dose.dose} mL／天`);
+  }
+
+  container.append(main, side);
+}
+
+
+// ===== 手機「記錄」分頁下方的最近幾筆紀錄 =====
+
+// 存完之後馬上看得到剛才那一筆，以及它存進專案了沒
+export function renderRecent(container, records, kinds, limit = 5) {
+  container.replaceChildren();
+  container.hidden = records.length === 0;
+  container.appendChild(el('h2', '', '最近的紀錄'));
+
+  const list = el('ul', 'recent-list');
+  records.slice().reverse().slice(0, limit).forEach((record) => {
+    const notes = [];
+    if (isStandard(record)) {
+      notes.push('標準液');
+    } else if (!isCounted(record)) {
+      notes.push('已排除');
+    }
+    if (methodLabel(record.method) !== '') {
+      notes.push(methodLabel(record.method));
+    }
+    if (waterChangeLiters(record) > 0) {
+      notes.push(`換水 ${waterChangeLiters(record)} L`);
+    }
+    if (kinds.get(record.id) !== 'file') {
+      notes.push('尚未儲存');
+    }
+
+    const li = el('li');
+    li.append(
+      el('span', 'recent-date', formatDateWithWeekday(record.date)),
+      el('strong', '', record.kh.toFixed(1)),
+      el('span', 'recent-note', notes.join('、')),
+    );
+    list.appendChild(li);
+  });
+  container.appendChild(list);
 }
 
 

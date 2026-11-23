@@ -2,7 +2,8 @@
 <html lang="zh-Hant-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- viewport-fit=cover：版面可以延伸到 iPhone 的瀏海與底部橫條，再由 CSS 留出安全距離 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>珊瑚缸 KH 紀錄</title>
   <!-- noindex：請搜尋引擎不要收錄這個頁面 -->
   <meta name="robots" content="noindex">
@@ -12,6 +13,7 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="KH 紀錄">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
@@ -20,66 +22,95 @@
   <!-- type="module"：讓 app.js 可以用 import 載入其他 JS 檔，而且會等 HTML 解析完才執行 -->
   <script type="module" src="js/app.js"></script>
 </head>
-<body>
-  <header>
-    <h1>珊瑚缸 KH 紀錄</h1>
+<!-- data-view：手機上一次只顯示一個分頁，這裡記錄目前顯示的是哪一個。電腦上所有區塊都會顯示 -->
+<body data-view="record">
+  <header class="app-header">
+    <div class="app-title">
+      <h1>珊瑚缸 KH 紀錄</h1>
+      <!-- 手機才顯示：切換到「同步與匯出」 -->
+      <button type="button" id="settings-button" class="settings-button">設定</button>
+    </div>
     <!-- 狀態訊息：載入中、資料範圍、錯誤訊息，內容由 app.js 填入 -->
     <p id="status" class="status">資料載入中…</p>
   </header>
 
   <main>
-    <!-- 統計卡片，內容由 app.js 產生。data-needs-data：沒有資料時整塊隱藏 -->
-    <section id="tiles" class="tiles" aria-label="統計摘要" data-needs-data></section>
+    <!-- 手機「記錄」分頁最上方的摘要，內容由 app.js 產生。data-needs-data：沒有資料時整塊隱藏 -->
+    <section id="hero" class="hero" data-view="record" data-needs-data aria-label="目前狀態">資料載入中…</section>
 
-    <section class="card">
+    <!-- 統計卡片，內容由 app.js 產生 -->
+    <section id="tiles" class="tiles" data-view="trend" data-needs-data aria-label="統計摘要"></section>
+
+    <section class="card" data-view="record">
       <h2 id="form-title">新增紀錄</h2>
-      <form id="record-form" class="record-form">
-        <label>日期
-          <input type="date" name="date" required>
-        </label>
-        <label>時間（可不填）
-          <input type="time" name="time">
-        </label>
-        <label>KH (dKH)
-          <input type="number" name="kh" step="0.1" min="0.1" max="20" inputmode="decimal" required>
-        </label>
-        <label>添加量 (mL／天)
-          <input type="number" name="dose_ml" step="0.1" min="0" inputmode="decimal">
-        </label>
-        <label class="span-2">測試方式
-          <select name="method">
-            <option value="">未標示</option>
-            <option value="hanna">Hanna</option>
-            <option value="salifert">Salifert</option>
-            <option value="other">其他</option>
-          </select>
-        </label>
-        <label class="span-2">水樣
-          <select name="type">
-            <option value="tank">魚缸水（一般測量）</option>
-            <option value="standard">標準液（儀器驗證）</option>
-          </select>
-        </label>
-        <label>當天換水量 (L)
-          <input type="number" name="water_change_l" step="0.5" min="0" inputmode="decimal" placeholder="沒換水就留空">
-        </label>
-        <label>這筆讀值是在
-          <select name="water_change_timing">
-            <option value="after">換水後測的</option>
-            <option value="before">換水前測的</option>
-            <option value="">未註明</option>
-          </select>
-        </label>
-        <label class="wide">備註
-          <input type="text" name="note" maxlength="100" placeholder="例如：重測、取水位置不同">
-        </label>
-        <label class="wide">事件（會在圖上畫出分隔線）
-          <input type="text" name="event" maxlength="20" placeholder="例如：滴定機校準、換稀釋比例">
-        </label>
-        <label class="check wide">
-          <input type="checkbox" name="exclude">
-          異常或可疑讀值，不納入統計
-        </label>
+      <!-- novalidate：不用瀏覽器內建的欄位檢查，改由 app.js 檢查並顯示中文訊息 -->
+      <form id="record-form" class="record-form" novalidate>
+        <!-- more-fields：手機上預設收合的欄位，按「更多欄位」才展開；電腦上一律顯示 -->
+        <div class="more-fields">
+          <label>日期
+            <input type="date" name="date">
+          </label>
+          <label>時間（可不填）
+            <input type="time" name="time">
+          </label>
+        </div>
+
+        <div class="kh-field">
+          <label for="kh-input">KH (dKH)</label>
+          <div class="kh-input">
+            <!-- 手機才顯示的加減按鈕：第一次按會帶入上次的讀值，之後每按一次加減 0.1 -->
+            <button type="button" id="kh-minus" class="stepper" aria-label="KH 減 0.1">−</button>
+            <input type="number" id="kh-input" name="kh" step="0.1" min="0.1" max="20" inputmode="decimal">
+            <button type="button" id="kh-plus" class="stepper" aria-label="KH 加 0.1">＋</button>
+          </div>
+        </div>
+
+        <div class="more-fields">
+          <label>添加量 (mL／天)
+            <input type="number" name="dose_ml" step="0.1" min="0" inputmode="decimal">
+          </label>
+          <label class="span-2">測試方式
+            <select name="method">
+              <option value="">未標示</option>
+              <option value="hanna">Hanna</option>
+              <option value="salifert">Salifert</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label class="span-2 full-on-mobile">水樣
+            <select name="type">
+              <option value="tank">魚缸水（一般測量）</option>
+              <option value="standard">標準液（儀器驗證）</option>
+            </select>
+          </label>
+          <label>當天換水量 (L)
+            <input type="number" name="water_change_l" step="0.5" min="0" inputmode="decimal" placeholder="沒換水就留空">
+          </label>
+          <label>這筆讀值是在
+            <select name="water_change_timing">
+              <option value="after">換水後測的</option>
+              <option value="before">換水前測的</option>
+              <option value="">未註明</option>
+            </select>
+          </label>
+          <label class="wide">備註
+            <input type="text" name="note" maxlength="100" placeholder="例如：重測、取水位置不同">
+          </label>
+          <label class="wide">事件（會在圖上畫出分隔線）
+            <input type="text" name="event" maxlength="20" placeholder="例如：滴定機校準、換稀釋比例">
+          </label>
+          <label class="check wide">
+            <input type="checkbox" name="exclude">
+            異常或可疑讀值，不納入統計
+          </label>
+        </div>
+
+        <!-- 手機才顯示：顯示目前會一起存入的日期、添加量等，按下去展開或收起其他欄位 -->
+        <button type="button" id="more-toggle" class="more-toggle" aria-expanded="false">
+          <span id="more-summary" class="more-summary"></span>
+          <span id="more-label" class="more-label">更多欄位</span>
+        </button>
+
         <div class="form-actions wide">
           <button type="submit" id="submit-button" class="primary">新增</button>
           <button type="button" id="cancel-button" hidden>取消</button>
@@ -88,57 +119,23 @@
         </div>
       </form>
 
+      <!-- 儲存狀態：還有幾項變更沒存進專案，以及相關的按鈕 -->
       <div class="save-area">
         <p id="export-info"></p>
         <div class="button-row">
-          <button id="sync-button" type="button" class="primary" hidden>同步到 GitHub</button>
-          <button id="export-button" type="button">匯出 JSON</button>
-          <button id="csv-button" type="button">匯出 CSV</button>
+          <button id="sync-button" type="button" class="primary" hidden>立即同步</button>
+          <button id="export-inline-button" type="button" class="export-json" hidden>匯出 JSON</button>
+          <button id="setup-button" type="button" hidden>設定 GitHub 同步</button>
           <button id="discard-button" type="button" hidden>捨棄未儲存的變更</button>
         </div>
         <p id="sync-message" class="message" role="status"></p>
-
-        <details>
-          <summary>GitHub 同步設定（手機使用時需要）</summary>
-          <p>設定權杖（token，一組代表你身分的密碼）之後，按「同步到 GitHub」就能把變更直接存進存放庫，不需要匯出檔案，手機也能用。</p>
-          <p id="token-state" class="hint"></p>
-          <div class="token-row">
-            <label>權杖
-              <input type="password" id="token-input" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
-            </label>
-            <button id="token-save-button" type="button">儲存並測試</button>
-            <button id="token-remove-button" type="button" hidden>移除權杖</button>
-          </div>
-          <p id="token-message" class="message" role="status"></p>
-          <p class="hint">如何產生權杖（在 GitHub 網站上操作，介面是英文）：</p>
-          <ol>
-            <li>點右上角的大頭貼，選「Settings」（設定）。</li>
-            <li>左側選單最下方選「Developer settings」（開發人員設定）。</li>
-            <li>選「Personal access tokens」（個人存取權杖）→「Fine-grained tokens」（細部權限權杖）→「Generate new token」（產生新權杖）。</li>
-            <li>「Repository access」（可存取的存放庫）選「Only select repositories」，只勾選 reef-kh。</li>
-            <li>「Permissions」（權限）裡的「Contents」（內容）設為「Read and write」（讀取與寫入）。</li>
-            <li>按「Generate token」，複製 github_pat_ 開頭的那串文字，貼到上面的欄位。</li>
-          </ol>
-          <ul>
-            <li>權杖只存在這台裝置的瀏覽器，不會寫進專案，也只會傳給 GitHub。每台裝置要各設定一次。</li>
-            <li>這個權杖可以修改 reef-kh 存放庫的內容，請不要提供給別人。裝置遺失或不再使用時，到同一個頁面把它刪除。</li>
-            <li>權杖到期後同步會失敗，重新產生一個再貼上即可。</li>
-          </ul>
-        </details>
-
-        <details>
-          <summary>不用 GitHub 同步時，如何把變更寫回專案</summary>
-          <ol>
-            <li>按「匯出 JSON」，下載 <code>kh-records.json</code>。</li>
-            <li>用下載的檔案取代專案裡的 <code>data/kh-records.json</code>。</li>
-            <li>在 VS Code 的「原始檔控制」提交並同步。</li>
-            <li>重新整理這個頁面，已寫入資料檔的變更會自動從瀏覽器暫存中移除。</li>
-          </ol>
-        </details>
       </div>
     </section>
 
-    <section class="card" data-needs-data>
+    <!-- 手機「記錄」分頁才顯示：最近幾筆紀錄，存完馬上看得到結果。內容由 app.js 產生 -->
+    <section id="recent" class="card recent" data-view="record" aria-label="最近的紀錄"></section>
+
+    <section class="card" data-view="trend" data-needs-data>
       <div class="card-head">
         <h2>KH 趨勢 (dKH)</h2>
         <div class="range-buttons" role="group" aria-label="圖表時間範圍">
@@ -153,15 +150,15 @@
       <!-- 兩張圖共用同一個時間軸與提示框 -->
       <div id="chart-area" class="chart-area">
         <div id="kh-chart" class="chart" tabindex="0" role="img"
-             aria-label="KH 趨勢圖，可用左右方向鍵逐日查看，完整數值請見下方表格"></div>
+             aria-label="KH 趨勢圖，可用左右方向鍵逐日查看，完整數值請見紀錄表格"></div>
         <h3>每日添加量 (mL)</h3>
         <div id="dose-chart" class="chart" role="img"
-             aria-label="每日添加量階梯圖，完整數值請見下方表格"></div>
+             aria-label="每日添加量階梯圖，完整數值請見紀錄表格"></div>
         <div id="tooltip" class="tooltip" hidden></div>
       </div>
     </section>
 
-    <section class="card" data-needs-data>
+    <section class="card" data-view="analysis" data-needs-data>
       <h2>消耗量與建議添加量</h2>
       <div class="analysis-controls">
         <label>計算區間
@@ -190,12 +187,12 @@
       </details>
     </section>
 
-    <section class="card" data-needs-data>
+    <section class="card" data-view="analysis" data-needs-data>
       <h2>測試方式比較</h2>
       <div id="methods-result"></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-view="history">
       <h2>所有讀值</h2>
       <!-- 外層包一個 div，表格太寬時可以左右捲動；手機上會改成一筆一塊的排法 -->
       <div class="table-wrap">
@@ -219,6 +216,87 @@
       </div>
       <button id="show-all-button" type="button" class="show-all" hidden></button>
     </section>
+
+    <section id="settings" class="card" data-view="settings">
+      <h2>同步與匯出</h2>
+
+      <h3>GitHub 同步</h3>
+      <p class="hint">設定權杖（token，一組代表你身分的密碼）之後，紀錄會直接存進 GitHub 上的存放庫，不需要匯出檔案，手機也能用。</p>
+      <p id="token-state" class="hint"></p>
+      <div class="token-row">
+        <label>權杖
+          <input type="password" id="token-input" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+        </label>
+        <button id="token-save-button" type="button">儲存並測試</button>
+        <button id="token-remove-button" type="button" hidden>移除權杖</button>
+      </div>
+      <p id="token-message" class="message" role="status"></p>
+      <label class="check">
+        <input type="checkbox" id="auto-sync" checked>
+        新增、修改或刪除後自動同步
+      </label>
+
+      <details id="token-help">
+        <summary>如何產生權杖</summary>
+        <ol>
+          <li>用瀏覽器開啟 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>。手機版的 GitHub 選單裡找不到這個頁面，請直接用這個網址。</li>
+          <li>「Token name」（名稱）自己取，例如 reef-kh-phone；「Expiration」（有效期限）選一個期限。</li>
+          <li>「Repository access」（可存取的存放庫）選「Only select repositories」，只勾選 reef-kh。</li>
+          <li>「Permissions」（權限）按「＋」，加入「Contents」（內容），再把它改成「Read and write」（讀取與寫入）。</li>
+          <li>按「Generate token」。畫面上 github_pat_ 開頭的那串文字只會顯示這一次，請立刻複製，不要重新整理。</li>
+          <li>回到這裡，貼到上面的欄位，按「儲存並測試」。</li>
+        </ol>
+        <ul>
+          <li>權杖只存在這台裝置的瀏覽器，不會寫進專案，也只會傳給 GitHub。每台裝置要各設定一次；加入主畫面後，要在主畫面開啟的畫面裡設定。</li>
+          <li>這個權杖可以修改 reef-kh 存放庫的內容，請不要提供給別人。裝置遺失或不再使用時，到 GitHub 把它刪除。</li>
+          <li>權杖到期後同步會失敗，回到同一個頁面按「Regenerate token」重新產生再貼上即可。</li>
+        </ul>
+      </details>
+
+      <h3>匯出</h3>
+      <div class="button-row">
+        <button type="button" class="export-json">匯出 JSON</button>
+        <button type="button" class="export-csv">匯出 CSV</button>
+      </div>
+      <details>
+        <summary>不用 GitHub 同步時，如何把變更寫回專案</summary>
+        <ol>
+          <li>按「匯出 JSON」，下載 <code>kh-records.json</code>。</li>
+          <li>用下載的檔案取代專案裡的 <code>data/kh-records.json</code>。</li>
+          <li>在 VS Code 的「原始檔控制」提交並同步。</li>
+          <li>重新整理這個頁面，已寫入資料檔的變更會自動從瀏覽器暫存中移除。</li>
+        </ol>
+      </details>
+
+      <h3>加入手機主畫面</h3>
+      <p class="hint">iPhone：用 Safari 開啟這個網頁，按分享按鈕，選「加入主畫面」。Android：用 Chrome 開啟，按右上角選單，選「加到主畫面」。之後從主畫面的圖示開啟，就像一般的 App。</p>
+
+      <h3>重新載入</h3>
+      <p class="hint">從主畫面開啟時沒有重新整理的按鈕。程式更新後畫面沒有變，或想重新讀取資料時，按這裡。還沒同步的變更不會消失。</p>
+      <div class="button-row">
+        <button type="button" id="reload-button">重新載入</button>
+      </div>
+    </section>
   </main>
+
+  <!-- 手機才顯示的底部分頁列 -->
+  <nav class="tab-bar" aria-label="主要分頁">
+    <button type="button" data-tab="record">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      記錄
+    </button>
+    <button type="button" data-tab="trend">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-5 4 3 7-8"/><path d="M4 20h16"/></svg>
+      趨勢
+    </button>
+    <button type="button" data-tab="analysis">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V4M18 20v-6"/></svg>
+      分析
+    </button>
+    <button type="button" data-tab="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+      歷史
+    </button>
+  </nav>
 </body>
 </html>
