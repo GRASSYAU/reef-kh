@@ -58,7 +58,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
     return;
   }
-  event.respondWith(networkFirst(request));
+  event.respondWith(networkFirst(event));
 });
 
 // 等待一段時間後失敗，用來替網路連線設定時間上限
@@ -68,33 +68,50 @@ function timeout(ms) {
   });
 }
 
-async function networkFirst(request) {
+// 經過轉址的回應不能直接用來回覆頁面的載入，重新包裝一次
+function unwrapRedirect(response) {
+  if (!response.redirected) {
+    return response;
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+async function networkFirst(event) {
+  const request = event.request;
   const cache = await caches.open(CACHE);
   // ignoreSearch：網址後面有沒有 ?參數 都視為同一個檔案
   const cached = await cache.match(request, { ignoreSearch: true });
 
-  try {
-    // cache: 'no-cache'：要求瀏覽器向伺服器確認檔案有沒有更新，不直接用瀏覽器自己的暫存
-    const fetching = fetch(request.url, { cache: 'no-cache' });
-    const response = await (cached ? Promise.race([fetching, timeout(NETWORK_TIMEOUT_MS)]) : fetching);
-
+  // 向伺服器要最新的檔案，成功就順手存一份到快取。
+  // cache: 'no-cache'：要求瀏覽器向伺服器確認檔案有沒有更新，不直接用瀏覽器自己的暫存
+  const fromNetwork = fetch(request.url, { cache: 'no-cache' }).then((response) => {
     if (response.ok) {
       // 回應只能讀一次，所以存進快取的是複製的那一份
-      cache.put(request.url, response.clone());
-    }
-    // 經過轉址的回應不能直接用來回覆頁面的載入，重新包裝一次
-    if (response.redirected) {
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
+      const saving = cache.put(request.url, response.clone()).catch(() => {});
+      try {
+        event.waitUntil(saving); // 請瀏覽器等存完再讓這段程式休息
+      } catch (error) {
+        // 已經回覆過頁面（逾時後才連上）時不能再要求等待，照常存檔即可
+      }
     }
     return response;
+  });
+
+  // 沒有存過這個檔案：只能等網路
+  if (!cached) {
+    return unwrapRedirect(await fromNetwork);
+  }
+
+  try {
+    const response = await Promise.race([fromNetwork, timeout(NETWORK_TIMEOUT_MS)]);
+    // 伺服器暫時出錯時，寧可用存下來的那一份，網頁才不會壞掉
+    return response.ok ? unwrapRedirect(response) : cached;
   } catch (error) {
-    if (cached) {
-      return cached;
-    }
-    throw error;
+    fromNetwork.catch(() => {}); // 逾時之後網路那邊才失敗的話，不用再處理
+    return cached;
   }
 }
