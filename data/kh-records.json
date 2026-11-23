@@ -104,5 +104,6 @@
   {"id": "r103", "date": "2026-11-19", "time": "", "kh": 7.5, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
   {"id": "r104", "date": "2026-11-20", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
   {"id": "r106", "date": "2026-11-21", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": 10, "water_change_timing": "after", "event": "", "note": "換水10 L後"},
-  {"id": "r107", "date": "2026-11-22", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""}
+  {"id": "r107", "date": "2026-11-22", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
+  {"id": "mwt5cmc5dkib", "date": "2026-11-23", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""}
 ]
