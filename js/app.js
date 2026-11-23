@@ -6,7 +6,7 @@ import {
 } from './data.js';
 import { renderCharts } from './chart.js';
 import { analyzeConsumption } from './analysis.js';
-import { TARGET_KH, TANK_LITERS, PRODUCT, DILUTION, khPerMl } from './config.js';
+import { TARGET_KH, TANK_LITERS, PRODUCT, DILUTION, CALIBRATION, khPerMl } from './config.js';
 import {
   emptyChanges, loadChanges, saveChanges, isSameRecord, toJsonText, downloadText,
 } from './storage.js';
@@ -205,6 +205,8 @@ function renderAnalysis(days) {
     `${PRODUCT.name}：每 ${PRODUCT.labelLiters} L 添加 ${PRODUCT.labelMl} mL 原液，提高 ${PRODUCT.labelRise} dKH。`,
     `稀釋比例：原液 ${DILUTION.stockMl} mL 加水至 ${DILUTION.totalMl} mL。`,
     `換算後，1 mL 稀釋液約提高 ${perMl.toFixed(4)} dKH。`,
+    `滴定機於 ${CALIBRATION.date} 校準。校準前實際出水量為設定值的 ${CALIBRATION.factorLow * 100}% 至 ${CALIBRATION.factorHigh * 100}%，` +
+      `計算時以 ${CALIBRATION.factor * 100}% 換算，並把上下限算進估計範圍。`,
   ];
   analysisBasis.replaceChildren(...basis.map((text) => {
     const li = document.createElement('li');
@@ -213,16 +215,29 @@ function renderAnalysis(days) {
   }));
 
   const windowDays = Number(windowSelect.value);
-  const result = analyzeConsumption(days, windowDays, perMl);
+  const analyze = (factor) => analyzeConsumption(days, windowDays, perMl, CALIBRATION.date, factor);
+  const result = analyze(CALIBRATION.factor);
   if (result === null) {
     showAnalysisMessage(`最近 ${windowDays} 天的有效測量日不足 5 天，或沒有添加量紀錄，無法計算。請改選較長的區間。`);
     return;
   }
 
+  // 估計範圍：測量誤差造成的範圍，再加上校準前出水比例（上下限）的不確定性
+  let low = result.consumption - result.error;
+  let high = result.consumption + result.error;
+  if (result.corrected) {
+    low = Math.min(low, analyze(CALIBRATION.factorLow).consumption - result.error);
+    high = Math.max(high, analyze(CALIBRATION.factorHigh).consumption + result.error);
+  }
+  low = Math.max(0, low);
+
   const range = `${formatShortDate(result.from)} 至 ${formatShortDate(result.to)}，${result.count} 個測量日`;
-  addResult('每日補充量（理論）', `${result.supply.toFixed(2)} dKH／天`, `區間內平均添加 ${(result.supply / perMl).toFixed(1)} mL／天`);
+  const supplyNote = result.corrected
+    ? `區間內平均實際添加 ${(result.supply / perMl).toFixed(1)} mL／天（校準前以設定值的 ${CALIBRATION.factor * 100}% 計）`
+    : `區間內平均添加 ${(result.supply / perMl).toFixed(1)} mL／天`;
+  addResult('每日補充量（理論）', `${result.supply.toFixed(2)} dKH／天`, supplyNote);
   addResult('KH 平均變化', `${formatSigned(result.change)} dKH／天`, range);
-  addResult('每日淨消耗量', `${result.consumption.toFixed(2)} dKH／天`, `估計範圍 ±${result.error.toFixed(2)}`);
+  addResult('每日淨消耗量', `${result.consumption.toFixed(2)} dKH／天`, `估計範圍 ${low.toFixed(2)} 至 ${high.toFixed(2)}`);
 
   if (result.consumption <= 0) {
     showAnalysisMessage('算出的消耗量不是正數，代表這段期間的資料無法反映實際消耗（例如測量誤差或換水影響過大），請改選其他區間。');
@@ -231,8 +246,8 @@ function renderAnalysis(days) {
 
   // 持平：補充量剛好等於消耗量
   const hold = result.consumption / perMl;
-  const holdLow = Math.max(0, (result.consumption - result.error) / perMl);
-  const holdHigh = (result.consumption + result.error) / perMl;
+  const holdLow = low / perMl;
+  const holdHigh = high / perMl;
   addResult('維持 KH 不變所需添加量', `約 ${hold.toFixed(1)} mL／天`, `估計範圍 ${holdLow.toFixed(1)} 至 ${holdHigh.toFixed(1)} mL`);
 
   // 到達目標：除了補足消耗，還要在指定天數內補上與目標的差距

@@ -31,8 +31,12 @@ function linearFit(points) {
 }
 
 // days：每日資料；windowDays：往回看幾天；perMl：1 mL 添加劑提高多少 dKH
+// calibrationDate、factor：這個日期之前，實際添加量 = 紀錄的設定值 × factor
 // 資料不足時回傳 null
-export function analyzeConsumption(days, windowDays, perMl) {
+export function analyzeConsumption(days, windowDays, perMl, calibrationDate, factor) {
+  // 日期字串是 'YYYY-MM-DD'，可以直接用 < 比較先後
+  const actualRatio = (date) => (date < calibrationDate ? factor : 1);
+
   const endTime = days[days.length - 1].time;
   const windowStart = endTime - windowDays * DAY_MS;
   const firstIndex = days.findIndex((day) => day.time > windowStart);
@@ -58,7 +62,8 @@ export function analyzeConsumption(days, windowDays, perMl) {
   inWindow.forEach((day, i) => {
     if (i > 0) {
       const gapDays = (day.time - inWindow[i - 1].time) / DAY_MS;
-      supplied += dose * perMl * gapDays; // 上一個測量日到這一天之間補充的量
+      // 上一個測量日到這一天之間補充的量（校準前要乘上實際出水比例）
+      supplied += dose * actualRatio(inWindow[i - 1].date) * perMl * gapDays;
     }
     if (day.dose != null) {
       dose = day.dose;
@@ -79,5 +84,6 @@ export function analyzeConsumption(days, windowDays, perMl) {
     consumption,
     error: fit.error * 2, // 取兩倍標準誤差作為估計範圍
     change: supply - consumption, // 區間內 KH 平均每天的變化
+    corrected: inWindow[0].date < calibrationDate, // 區間內是否包含校準前的資料
   };
 }
