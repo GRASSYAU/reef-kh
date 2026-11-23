@@ -45,6 +45,7 @@ function scale(d0, d1, r0, r1) {
 
 // ===== 主函式 =====
 
+// 只需要呼叫一次；之後資料變動時，呼叫回傳物件的 update() 重畫
 // khBox、doseBox：放兩張圖的容器；area：包住兩張圖的外層；tooltip：提示框
 // days：每日資料（buildDays 的結果）；records：原始紀錄；target：目標 KH
 export function renderCharts({ khBox, doseBox, area, tooltip, days, records, target }) {
@@ -52,9 +53,13 @@ export function renderCharts({ khBox, doseBox, area, tooltip, days, records, tar
   let hoverIndex = null; // 目前查看的是第幾天
 
   // 被排除的魚缸讀值，要在圖上用 × 標出來
-  const excluded = records
-    .filter((record) => !isStandard(record) && !isCounted(record))
-    .map((record) => ({ time: Date.parse(record.date), kh: record.kh }));
+  let excluded = findExcluded(records);
+
+  function findExcluded(list) {
+    return list
+      .filter((record) => !isStandard(record) && !isCounted(record))
+      .map((record) => ({ time: Date.parse(record.date), kh: record.kh }));
+  }
 
   // ----- 繪圖 -----
 
@@ -342,4 +347,16 @@ export function renderCharts({ khBox, doseBox, area, tooltip, days, records, tar
   }).observe(khBox);
 
   draw();
+
+  // 回傳 update 函式：資料有變動（例如新增一筆紀錄）時，用新資料重畫
+  return {
+    update(newDays, newRecords) {
+      if (state) {
+        hide();
+      }
+      days = newDays;
+      excluded = findExcluded(newRecords);
+      draw();
+    },
+  };
 }

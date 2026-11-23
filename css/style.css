@@ -338,3 +338,138 @@ td:last-child {
 tr.not-counted td {
   color: var(--muted);
 }
+
+/* ---------- 新增紀錄表單 ---------- */
+
+.record-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.record-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
+
+/* wide：占滿整列 */
+.record-form .wide {
+  grid-column: 1 / -1;
+}
+
+.record-form .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: var(--text);
+}
+
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="text"],
+select {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  background: var(--page);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--kh);
+  outline-offset: 1px;
+}
+
+button {
+  min-height: 38px;
+  padding: 6px 16px;
+  background: var(--surface);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--page);
+}
+
+button.primary {
+  color: #ffffff;
+  background: #256abf;
+  border-color: #256abf;
+}
+
+button.primary:hover {
+  background: #1c5cab;
+}
+
+/* 表格裡的小按鈕 */
+button.small {
+  min-height: 0;
+  margin-left: 8px;
+  padding: 0 8px;
+  font-size: 0.8125rem;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-message {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.form-message.error {
+  color: var(--error);
+}
+
+/* ---------- 匯出 ---------- */
+
+.export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--grid);
+  font-size: 0.875rem;
+}
+
+.export p {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.export details {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+
+.export summary {
+  cursor: pointer;
+}
+
+.export ol {
+  margin: 8px 0 0;
+  padding-left: 1.5em;
+}

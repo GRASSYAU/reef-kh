@@ -20,6 +20,56 @@
     <section id="tiles" class="tiles" aria-label="統計摘要"></section>
 
     <section class="card">
+      <h2>新增紀錄</h2>
+      <form id="record-form" class="record-form">
+        <label>日期
+          <input type="date" name="date" required>
+        </label>
+        <label>時間（可不填）
+          <input type="time" name="time">
+        </label>
+        <label>KH (dKH)
+          <input type="number" name="kh" step="0.1" min="0.1" max="20" inputmode="decimal" required>
+        </label>
+        <label>添加量 (mL／天，可不填)
+          <input type="number" name="dose_ml" step="0.1" min="0" inputmode="decimal">
+        </label>
+        <label>水樣
+          <select name="type">
+            <option value="tank">魚缸水</option>
+            <option value="standard">標準液</option>
+          </select>
+        </label>
+        <label class="wide">備註
+          <input type="text" name="note" maxlength="100" placeholder="例如：換水 10 L 後、Hanna 重測">
+        </label>
+        <label class="check wide">
+          <input type="checkbox" name="exclude">
+          異常或可疑讀值，不納入統計
+        </label>
+        <div class="form-actions wide">
+          <button type="submit" class="primary">新增</button>
+          <!-- role="status"：內容更新時，螢幕閱讀器會唸出來 -->
+          <span id="form-message" class="form-message" role="status"></span>
+        </div>
+      </form>
+
+      <div class="export">
+        <p id="export-info"></p>
+        <button id="export-button" type="button">匯出 JSON</button>
+        <details>
+          <summary>如何把新紀錄寫回專案</summary>
+          <ol>
+            <li>按「匯出 JSON」，下載 <code>kh-records.json</code>。</li>
+            <li>用下載的檔案取代專案裡的 <code>data/kh-records.json</code>。</li>
+            <li>在 VS Code 的「原始檔控制」提交並同步。</li>
+            <li>重新整理這個頁面，已寫入檔案的紀錄會自動從瀏覽器暫存中移除。</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>KH 趨勢 (dKH)</h2>
       <ul class="legend">
         <li><span class="key key-line"></span>每日 KH（有效讀值平均）</li>

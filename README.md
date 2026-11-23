@@ -23,6 +23,7 @@ reef-kh/
 ├── js/app.js             主程式：統計卡片、表格，目標 KH 設定在這裡
 ├── js/data.js            讀取 JSON、整理每日資料、統計與格式化
 ├── js/chart.js           用 SVG 畫 KH 趨勢圖與添加量圖
+├── js/storage.js         瀏覽器暫存（localStorage）與匯出 JSON
 └── data/kh-records.json  KH 紀錄（2026-08-25 起的實際測量值）
 ```
 
@@ -33,6 +34,16 @@ reef-kh/
 1. 用 VS Code 開啟這個資料夾
 2. 安裝擴充套件 Live Server
 3. 在 `index.html` 上按右鍵，選「Open with Live Server」
+
+## 新增紀錄
+
+1. 在頁面上的「新增紀錄」表單輸入數值，按「新增」。紀錄會先暫存在瀏覽器的 localStorage。
+2. 按「匯出 JSON」下載 `kh-records.json`，用它取代 `data/kh-records.json`。
+3. 在 VS Code 的「原始檔控制」提交並同步。
+4. 重新整理頁面，已寫入檔案的紀錄會自動從瀏覽器暫存中移除。
+
+暫存的紀錄只存在同一台電腦的同一個瀏覽器，清除瀏覽資料就會消失，請定期匯出。
+表格中標示「尚未寫入檔案」的紀錄可以直接刪除；已在檔案裡的紀錄要修改時，請直接編輯 JSON 檔。
 
 ## 資料格式
 
@@ -60,5 +71,5 @@ reef-kh/
 
 - [x] 讀取 JSON 並用表格顯示
 - [x] 統計卡片、KH 趨勢圖、添加量圖
-- [ ] 表單新增紀錄，並可匯出 JSON
+- [x] 表單新增紀錄，並可匯出 JSON
 - [ ] 每日 KH 消耗量與建議添加量
