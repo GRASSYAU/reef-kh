@@ -1,21 +1,7 @@
 /* ==========================================================================
    珊瑚缸 KH 紀錄 的樣式
-   順序：字體與顏色 → 基本元素 → 各個區塊 → 圖表 → 表格 → 手機的 App 版面
+   順序：顏色 → 基本元素 → 各個區塊 → 圖表 → 表格 → 手機的 App 版面
    ========================================================================== */
-
-/* ---------- 字體 ---------- */
-
-/* Figtree：英數字用的字體（開源授權，授權條款在 fonts/Figtree-LICENSE.txt）。
-   unicode-range 限定只有英數字與常用符號使用這個字體，中文仍然用裝置內建的字體 */
-@font-face {
-  font-family: "Figtree";
-  src: url("../fonts/figtree-latin-wght-normal.woff2") format("woff2");
-  font-weight: 300 900; /* 可變字體：這個範圍內的粗細都由同一個檔案提供 */
-  font-style: normal;
-  font-display: swap; /* 字體還沒下載完時，先用內建字體顯示，不會一片空白 */
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
-    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
 
 /* ---------- 顏色與共用設定 ---------- */
 
@@ -92,8 +78,9 @@ body {
     max(16px, env(safe-area-inset-right))
     max(48px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
-  /* 英數字用 Figtree，中文用各裝置內建的字體（iPhone 是蘋方，Windows 是微軟正黑體） */
-  font-family: "Figtree", system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  /* 使用各裝置內建的字體，不用另外下載：
+     iPhone 與 Mac 是蘋方（中文）搭配 San Francisco（英數字），Windows 是微軟正黑體 */
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif;
   color: var(--text);
   background: var(--page);
   line-height: 1.6;

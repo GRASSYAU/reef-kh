@@ -16,7 +16,6 @@ const CORE_FILES = [
   'index.html',
   'manifest.json',
   'css/style.css',
-  'fonts/figtree-latin-wght-normal.woff2',
   'js/app.js',
   'js/analysis.js',
   'js/chart.js',
