@@ -5,34 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>珊瑚缸 KH 紀錄</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- defer：等 HTML 全部解析完才執行 app.js，這樣 JS 才找得到下方的表格 -->
-  <script src="js/app.js" defer></script>
+  <!-- type="module"：讓 app.js 可以用 import 載入其他 JS 檔，而且會等 HTML 解析完才執行 -->
+  <script type="module" src="js/app.js"></script>
 </head>
 <body>
   <header>
     <h1>珊瑚缸 KH 紀錄</h1>
+    <!-- 狀態訊息：載入中、資料範圍、錯誤訊息，內容由 app.js 填入 -->
+    <p id="status" class="status">資料載入中…</p>
   </header>
 
   <main>
-    <!-- 狀態訊息：載入中、筆數、錯誤訊息都顯示在這裡，內容由 app.js 填入 -->
-    <p id="status" class="status">資料載入中…</p>
+    <!-- 統計卡片，內容由 app.js 產生 -->
+    <section id="tiles" class="tiles" aria-label="統計摘要"></section>
 
-    <!-- 外層包一個 div，手機螢幕太窄時表格可以左右捲動 -->
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">日期</th>
-            <th scope="col">時間</th>
-            <th scope="col" class="num">KH (dKH)</th>
-            <th scope="col" class="num">添加量 (mL)</th>
-            <th scope="col">備註</th>
-          </tr>
-        </thead>
-        <!-- tbody 故意留空，資料列由 app.js 產生 -->
-        <tbody id="kh-body"></tbody>
-      </table>
-    </div>
+    <section class="card">
+      <h2>KH 趨勢 (dKH)</h2>
+      <ul class="legend">
+        <li><span class="key key-line"></span>每日 KH（有效讀值平均）</li>
+        <li><span class="key key-cross">×</span>已排除讀值</li>
+      </ul>
+
+      <!-- 兩張圖共用同一個時間軸與提示框 -->
+      <div id="chart-area" class="chart-area">
+        <div id="kh-chart" class="chart" tabindex="0" role="img"
+             aria-label="每日 KH 折線圖，可用左右方向鍵逐日查看，完整數值請見下方表格"></div>
+        <h3>每日添加量 (mL)</h3>
+        <div id="dose-chart" class="chart" role="img"
+             aria-label="每日添加量階梯圖，完整數值請見下方表格"></div>
+        <div id="tooltip" class="tooltip" hidden></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>所有讀值</h2>
+      <!-- 外層包一個 div，手機螢幕太窄時表格可以左右捲動 -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">日期</th>
+              <th scope="col">時間</th>
+              <th scope="col" class="num">KH (dKH)</th>
+              <th scope="col" class="num">添加量 (mL)</th>
+              <th scope="col">狀態</th>
+              <th scope="col">備註</th>
+            </tr>
+          </thead>
+          <!-- tbody 故意留空，資料列由 app.js 產生 -->
+          <tbody id="kh-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </body>
 </html>
