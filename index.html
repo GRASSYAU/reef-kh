@@ -24,6 +24,11 @@
 </head>
 <!-- data-view：手機上一次只顯示一個分頁，這裡記錄目前顯示的是哪一個。電腦上所有區塊都會顯示 -->
 <body data-view="record">
+  <!-- iPhone／iPad 專用：固定在畫面最上緣、跟頁面同色的色條。
+       iOS 26 起，主畫面的 App 會被系統在狀態列下方蓋上一層模糊；最上緣有這個元素，系統就不會套用。
+       樣式與說明在 style.css 的「畫面最上緣的色條」 -->
+  <div class="edge-strip" aria-hidden="true"></div>
+
   <header class="app-header">
     <div class="app-title">
       <h1><img class="app-icon" src="icons/icon.svg" alt="" width="30" height="30">珊瑚缸 KH 紀錄</h1>

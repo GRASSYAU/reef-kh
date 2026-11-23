@@ -38,6 +38,9 @@
   --hero-to: #0b7a80;
   --error: #b42318;
   --error-bg: #fef3f2;
+  /* 頁面上方的留白。max(…, env(…))：一般留固定的距離，有瀏海時至少留到安全距離。
+     畫面最上緣的色條（.edge-strip）也用這個高度，所以集中寫在這裡 */
+  --page-top: max(24px, env(safe-area-inset-top, 0px));
 }
 
 /* 深色模式：作業系統設為深色時自動套用 */
@@ -74,7 +77,7 @@ body {
   margin: 0;
   /* max(…, env(…))：一般留固定的距離；手機橫放時，瀏海那一側至少留到安全距離 */
   padding:
-    max(24px, env(safe-area-inset-top))
+    var(--page-top)
     max(16px, env(safe-area-inset-right))
     max(48px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
@@ -167,6 +170,37 @@ a {
   color: var(--error);
   background: var(--error-bg);
   border-radius: 10px;
+}
+
+/* ---------- iPhone／iPad：畫面最上緣的色條 ----------
+   iOS 26 起，加入主畫面的網頁 App 會被系統在狀態列下方蓋上一層漸層模糊（大約 40px 高）。
+   標題列剛好落在那個範圍裡，圖示、標題與「設定」按鈕看起來會糊糊的。
+   網頁沒有任何屬性可以關掉這個效果；但如果畫面最上緣有一個「固定位置、有底色、
+   跟畫面一樣寬」的元素，系統就會改用它的底色填滿狀態列，不再套用模糊。
+   （這是其他開發者在實機上驗證出來的做法，Apple 沒有正式文件，日後的 iOS 可能改變。）
+
+   所以在最上緣放一條跟頁面同色的色條：平常看不出來，捲動時內容會從它的下方消失。 */
+
+/* 其他裝置用不到，先隱藏 */
+.edge-strip {
+  display: none;
+}
+
+/* @supports：瀏覽器認得括號裡的寫法才套用。
+   -webkit-touch-callout 只有 iPhone／iPad 的瀏覽器認得，所以這一段只在 iOS 生效 */
+@supports (-webkit-touch-callout: none) {
+  .edge-strip {
+    display: block;
+    position: fixed; /* 固定在畫面上，不跟著內容捲動 */
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 11; /* 疊在所有內容之上 */
+    height: var(--page-top); /* 跟頁面上方的留白一樣高，不會蓋到標題列。要超過 10px 系統才會採用 */
+    background-color: var(--page); /* 一定要是不透明的單一顏色 */
+    /* 不加 pointer-events: none：系統是用「這個位置點得到哪個元素」來找色條的。
+       色條只蓋住上方的留白，那裡本來就沒有可以點的東西 */
+  }
 }
 
 .message {
@@ -828,9 +862,13 @@ tr.editing td {
 @media (max-width: 640px) {
   /* env(safe-area-inset-*)：iPhone 瀏海、圓角與底部橫條占掉的距離。
      下方另外留出分頁列的高度，內容才不會被擋住 */
+  :root {
+    --page-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
   body {
     padding:
-      calc(12px + env(safe-area-inset-top))
+      var(--page-top)
       calc(14px + env(safe-area-inset-right))
       calc(84px + env(safe-area-inset-bottom))
       calc(14px + env(safe-area-inset-left));
