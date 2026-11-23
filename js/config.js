@@ -31,7 +31,7 @@ export const CALIBRATION = {
 
 // 換水用的新海水 KH（dKH）。實際量過就填數字，例如 8.5；
 // 填 null 代表沒量過，程式會用歷次換水前後的讀值推算（誤差較大）
-export const NEW_SALTWATER_KH = null;
+export const NEW_SALTWATER_KH = 8.3;
 
 // GitHub 同步：資料檔所在的存放庫、分支與路徑
 export const GITHUB = {
