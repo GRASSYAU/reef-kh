@@ -90,6 +90,39 @@
     </section>
 
     <section class="card">
+      <h2>消耗量與建議添加量</h2>
+      <div class="analysis-controls">
+        <label>計算區間
+          <select id="window-select">
+            <option value="7">最近 7 天</option>
+            <option value="14" selected>最近 14 天</option>
+            <option value="30">最近 30 天</option>
+          </select>
+        </label>
+        <label>預計幾天到達目標
+          <input type="number" id="reach-days" value="14" min="3" max="60" step="1" inputmode="numeric">
+        </label>
+      </div>
+
+      <!-- 計算結果由 app.js 填入 -->
+      <p id="analysis-message" class="analysis-message" hidden></p>
+      <dl id="analysis-result" class="analysis-result"></dl>
+
+      <details>
+        <summary>計算依據與限制</summary>
+        <ul id="analysis-basis"></ul>
+        <ul>
+          <li>添加劑的效果依產品標示換算，是理論值，實際效果可能有落差。</li>
+          <li>「淨消耗量」已包含例行換水帶來的補充，前提是之後維持相同的換水習慣。</li>
+          <li>單次測量有誤差，區間越短結果越不穩定；估計範圍越寬，代表越不可靠。</li>
+          <li>區間內如果校準過滴定機、換過稀釋比例或添加劑，實際添加量與紀錄不符，結果會失準。</li>
+          <li>KH 升高後，珊瑚的消耗量可能跟著改變，到達目標後請重新觀察。</li>
+          <li>這裡的數字是估算，調整添加量時建議小幅調整，並持續測量確認。</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="card">
       <h2>所有讀值</h2>
       <!-- 外層包一個 div，手機螢幕太窄時表格可以左右捲動 -->
       <div class="table-wrap">

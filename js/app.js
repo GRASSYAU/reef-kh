@@ -5,12 +5,11 @@ import {
   isStandard, isCounted, formatKh, formatDelta, formatShortDate,
 } from './data.js';
 import { renderCharts } from './chart.js';
+import { analyzeConsumption } from './analysis.js';
+import { TARGET_KH, TANK_LITERS, PRODUCT, DILUTION, khPerMl } from './config.js';
 import {
   emptyChanges, loadChanges, saveChanges, isSameRecord, toJsonText, downloadText,
 } from './storage.js';
-
-// 目標 KH（dKH）。要調整目標時只改這一行
-const TARGET_KH = 8.3;
 
 const statusEl = document.querySelector('#status');
 const tilesEl = document.querySelector('#tiles');
@@ -23,6 +22,11 @@ const discardButton = document.querySelector('#discard-button');
 const formTitle = document.querySelector('#form-title');
 const submitButton = document.querySelector('#submit-button');
 const cancelButton = document.querySelector('#cancel-button');
+const windowSelect = document.querySelector('#window-select');
+const reachDaysInput = document.querySelector('#reach-days');
+const analysisMessage = document.querySelector('#analysis-message');
+const analysisResult = document.querySelector('#analysis-result');
+const analysisBasis = document.querySelector('#analysis-basis');
 
 // 畫面顯示的資料 = 檔案裡的紀錄 + 在瀏覽器裡做的變更
 let fileRecords = [];          // data/kh-records.json 裡的紀錄
@@ -157,6 +161,107 @@ function renderTiles(days) {
 }
 
 
+// ===== 消耗量與建議添加量 =====
+
+// 帶正負號、固定小數兩位：0.043 → "+0.04"
+function formatSigned(value) {
+  const text = Math.abs(value).toFixed(2);
+  if (Number(text) === 0) {
+    return '±0.00';
+  }
+  return (value > 0 ? '+' : '−') + text;
+}
+
+// 在結果清單加一列：項目名稱、數值、補充說明
+function addResult(term, value, note) {
+  const dt = document.createElement('dt');
+  dt.textContent = term;
+
+  const dd = document.createElement('dd');
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+  dd.appendChild(strong);
+  if (note) {
+    const span = document.createElement('span');
+    span.textContent = note;
+    dd.appendChild(span);
+  }
+  analysisResult.append(dt, dd);
+}
+
+function showAnalysisMessage(text) {
+  analysisMessage.textContent = text;
+  analysisMessage.hidden = false;
+}
+
+function renderAnalysis(days) {
+  const perMl = khPerMl();
+  analysisResult.replaceChildren();
+  analysisMessage.hidden = true;
+
+  // 計算依據：把設定檔裡的數值列出來，方便核對
+  const basis = [
+    `系統水量 ${TANK_LITERS} L。`,
+    `${PRODUCT.name}：每 ${PRODUCT.labelLiters} L 添加 ${PRODUCT.labelMl} mL 原液，提高 ${PRODUCT.labelRise} dKH。`,
+    `稀釋比例：原液 ${DILUTION.stockMl} mL 加水至 ${DILUTION.totalMl} mL。`,
+    `換算後，1 mL 稀釋液約提高 ${perMl.toFixed(4)} dKH。`,
+  ];
+  analysisBasis.replaceChildren(...basis.map((text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }));
+
+  const windowDays = Number(windowSelect.value);
+  const result = analyzeConsumption(days, windowDays, perMl);
+  if (result === null) {
+    showAnalysisMessage(`最近 ${windowDays} 天的有效測量日不足 5 天，或沒有添加量紀錄，無法計算。請改選較長的區間。`);
+    return;
+  }
+
+  const range = `${formatShortDate(result.from)} 至 ${formatShortDate(result.to)}，${result.count} 個測量日`;
+  addResult('每日補充量（理論）', `${result.supply.toFixed(2)} dKH／天`, `區間內平均添加 ${(result.supply / perMl).toFixed(1)} mL／天`);
+  addResult('KH 平均變化', `${formatSigned(result.change)} dKH／天`, range);
+  addResult('每日淨消耗量', `${result.consumption.toFixed(2)} dKH／天`, `估計範圍 ±${result.error.toFixed(2)}`);
+
+  if (result.consumption <= 0) {
+    showAnalysisMessage('算出的消耗量不是正數，代表這段期間的資料無法反映實際消耗（例如測量誤差或換水影響過大），請改選其他區間。');
+    return;
+  }
+
+  // 持平：補充量剛好等於消耗量
+  const hold = result.consumption / perMl;
+  const holdLow = Math.max(0, (result.consumption - result.error) / perMl);
+  const holdHigh = (result.consumption + result.error) / perMl;
+  addResult('維持 KH 不變所需添加量', `約 ${hold.toFixed(1)} mL／天`, `估計範圍 ${holdLow.toFixed(1)} 至 ${holdHigh.toFixed(1)} mL`);
+
+  // 到達目標：除了補足消耗，還要在指定天數內補上與目標的差距
+  const latest = days[days.length - 1];
+  const now = averageKh(days, latest.time, 7); // 用近 7 天平均當作目前的 KH，比單日讀值穩定
+  const gap = TARGET_KH - now;
+  const reachDays = Number(reachDaysInput.value);
+  if (gap <= 0.005) {
+    addResult(`到達目標 ${formatKh(TARGET_KH)}`, '已達標', `近 7 天平均 ${formatKh(now)} dKH，維持上面的添加量即可`);
+    return;
+  }
+  if (!Number.isInteger(reachDays) || reachDays < 3 || reachDays > 60) {
+    showAnalysisMessage('「預計幾天到達目標」請輸入 3 到 60 的整數。');
+    return;
+  }
+
+  const risePerDay = gap / reachDays;
+  const reach = (result.consumption + risePerDay) / perMl;
+  addResult(
+    `${reachDays} 天到達 ${formatKh(TARGET_KH)} 所需添加量`,
+    `約 ${reach.toFixed(1)} mL／天`,
+    `從近 7 天平均 ${formatKh(now)} 起算，每天上升 ${risePerDay.toFixed(2)} dKH；到達後改回維持量`,
+  );
+  if (risePerDay > 0.5) {
+    showAnalysisMessage('每天上升超過 0.5 dKH，變化偏快，建議拉長天數。');
+  }
+}
+
+
 // ===== 表格 =====
 
 function createCell(text, className) {
@@ -240,6 +345,7 @@ function refresh() {
   }
 
   renderTiles(days);
+  renderAnalysis(days);
   if (charts === null) {
     charts = renderCharts({
       khBox: document.querySelector('#kh-chart'),
@@ -484,6 +590,9 @@ async function init() {
     cancelButton.addEventListener('click', cancelEdit);
     exportButton.addEventListener('click', handleExport);
     discardButton.addEventListener('click', handleDiscard);
+    // 改變計算區間或天數時，只需要重算分析的部分
+    windowSelect.addEventListener('change', () => renderAnalysis(buildDays(records)));
+    reachDaysInput.addEventListener('input', () => renderAnalysis(buildDays(records)));
   } catch (error) {
     // 讀檔失敗、JSON 格式錯誤、欄位缺漏，都會跑到這裡
     console.error(error);

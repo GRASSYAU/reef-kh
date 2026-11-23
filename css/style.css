@@ -481,3 +481,74 @@ tr.editing td {
   margin: 8px 0 0;
   padding-left: 1.5em;
 }
+
+/* ---------- 消耗量與建議添加量 ---------- */
+
+.analysis-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.analysis-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
+
+.analysis-message {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  color: var(--text);
+  background: var(--page);
+  border-left: 4px solid var(--axis);
+  font-size: 0.875rem;
+}
+
+/* dl 是「名稱 — 內容」成對的清單，用兩欄格線排成表格的樣子 */
+.analysis-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  margin: 0 0 12px;
+}
+
+.analysis-result dt,
+.analysis-result dd {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+.analysis-result dt {
+  padding-right: 12px;
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.analysis-result dd strong {
+  display: block;
+  font-size: 1.0625rem;
+}
+
+.analysis-result dd span {
+  color: var(--text-2);
+  font-size: 0.8125rem;
+}
+
+.card > details {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+
+.card > details summary {
+  cursor: pointer;
+}
+
+.card > details ul {
+  margin: 8px 0 0;
+  padding-left: 1.5em;
+}
