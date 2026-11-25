@@ -107,5 +107,6 @@
   {"id": "r107", "date": "2026-11-22", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
   {"id": "mwt5cmc5dkib", "date": "2026-11-23", "time": "", "kh": 7.7, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
   {"id": "mwukev7pqwi5", "date": "2026-11-24", "time": "", "kh": 7.4, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": ""},
-  {"id": "mww0fd0z4i20", "date": "2026-11-25", "time": "18:57", "kh": 8, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": "感覺怪怪或誤差"}
+  {"id": "mww0fd0z4i20", "date": "2026-11-25", "time": "18:57", "kh": 8, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": "感覺怪怪或誤差"},
+  {"id": "mww0kewzsq5e", "date": "2026-11-25", "time": "", "kh": 7.9, "dose_ml": 20, "type": "tank", "method": "hanna", "exclude": false, "water_change_l": null, "water_change_timing": "", "event": "", "note": "重測一次"}
 ]
